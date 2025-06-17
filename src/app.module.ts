@@ -3,14 +3,28 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { SessionController } from "./modules/session/session.controller";
 import { MongooseModule } from "@nestjs/mongoose";
-import { ProductsModule } from './modules/products/products.module';
-import { MemoryController } from './modules/chat-model/memory/memory.controller';
-import { MemoryService } from './modules/chat-model/memory/memory.service';
-import { MemoryModule } from './modules/chat-model/memory/memory.module';
+import { ProductsModule } from "./modules/products/products.module";
+import { ChatModule } from "./modules/chat-model/chat/chat.module";
+import { ScheduleModule } from "@nestjs/schedule";
+import { UsersController } from "./modules/users/users.controller";
+import { UsersModule } from "./modules/users/users.module";
+import { ConfigModule } from "@nestjs/config";
+import { AuthModule } from "./modules/auth/auth.module";
 
 @Module({
-  imports: [MongooseModule.forRoot("mongodb://localhost:27017/chatbot_sass"), ProductsModule, MemoryModule],
-  controllers: [AppController, SessionController, MemoryController],
-  providers: [AppService, MemoryService],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ".env",
+    }),
+    MongooseModule.forRoot(process.env.DATABASE_URL || ""),
+    ProductsModule,
+    ChatModule,
+    ScheduleModule.forRoot(),
+    UsersModule,
+    AuthModule,
+  ],
+  controllers: [AppController, SessionController],
+  providers: [AppService],
 })
 export class AppModule {}
