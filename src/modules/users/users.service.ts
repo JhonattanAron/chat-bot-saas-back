@@ -24,22 +24,104 @@ export class UsersService {
     private readonly faqsService: FaqsService
   ) {}
 
-  async createAssistantChatData(@Body() body: CreateAssistantDto) {
-    // Verifica si ya existe un AssistantChat para ese usuario
-    const user_id = body.user_id;
-    const exists = await this.model.findOne({ user_id });
-    //if (exists) {
-    //  throw new ConflictException(
-    //    "Ya existe un AssistantChat para este usuario."
-    //  );
-    //}
+  async createAssistantChatData(body: CreateAssistantDto) {
     const assistantChat = new this.model(body);
     await assistantChat.save();
     return assistantChat;
   }
 
+  // ==================== MÉTODOS CRUD PARA FUNCIONES ====================
+
+  async addFunctionToAssistant(
+    assistantId: string,
+    userId: string,
+    newFunction: any
+  ) {
+    const assistant = await this.model.findOneAndUpdate(
+      { _id: assistantId, user_id: userId },
+      { $push: { funciones: newFunction } },
+      { new: true }
+    );
+
+    if (!assistant) {
+      throw new NotFoundException("Assistant not found");
+    }
+
+    return assistant;
+  }
+
+  async updateFunction(
+    assistantId: string,
+    userId: string,
+    functionId: string,
+    updateData: any
+  ) {
+    // Construir el objeto de actualización dinámicamente
+    const updateFields: any = {};
+
+    if (updateData.name !== undefined)
+      updateFields["funciones.$.name"] = updateData.name;
+    if (updateData.description !== undefined)
+      updateFields["funciones.$.description"] = updateData.description;
+    if (updateData.type !== undefined)
+      updateFields["funciones.$.type"] = updateData.type;
+    if (updateData.code !== undefined)
+      updateFields["funciones.$.code"] = updateData.code;
+    if (updateData.credentials !== undefined)
+      updateFields["funciones.$.credentials"] = updateData.credentials;
+
+    // Manejar actualización de API
+    if (updateData.api) {
+      if (updateData.api.url !== undefined)
+        updateFields["funciones.$.api.url"] = updateData.api.url;
+      if (updateData.api.method !== undefined)
+        updateFields["funciones.$.api.method"] = updateData.api.method;
+      if (updateData.api.headers !== undefined)
+        updateFields["funciones.$.api.headers"] = updateData.api.headers;
+      if (updateData.api.parameters !== undefined)
+        updateFields["funciones.$.api.parameters"] = updateData.api.parameters;
+      if (updateData.api.auth !== undefined)
+        updateFields["funciones.$.api.auth"] = updateData.api.auth;
+    }
+
+    const assistant = await this.model.findOneAndUpdate(
+      {
+        _id: assistantId,
+        user_id: userId,
+        "funciones._id": functionId,
+      },
+      { $set: updateFields },
+      { new: true }
+    );
+
+    if (!assistant) {
+      throw new NotFoundException("Function or Assistant not found");
+    }
+
+    return assistant;
+  }
+
+  async deleteFunction(
+    assistantId: string,
+    userId: string,
+    functionId: string
+  ) {
+    const assistant = await this.model.findOneAndUpdate(
+      { _id: assistantId, user_id: userId },
+      { $pull: { funciones: { _id: functionId } } },
+      { new: true }
+    );
+
+    if (!assistant) {
+      throw new NotFoundException("Assistant not found");
+    }
+
+    return assistant;
+  }
+
+  // ==================== MÉTODOS EXISTENTES ====================
+
   async getAssistantChatByChatIdAndUserIdAndFaqs(id: string, user_id: string) {
-    // Buscar el chat por chat_id y user_id
     const assistant_chat = await this.model
       .findOne({ _id: id, user_id })
       .exec();
@@ -50,7 +132,7 @@ export class UsersService {
     }
 
     const faqsDoc = await this.faqsService.getFaqs(user_id, id);
-    const faqs = (faqsDoc?.faqs ?? []).map((f) => ({
+    const faqs = (faqsDoc?.faqs ?? []).map((f: any) => ({
       _id: f._id,
       question: f.question,
       answer: f.answer,
@@ -66,9 +148,16 @@ export class UsersService {
   async getAllAssistantChatsByUserId(user_id: string) {
     return this.model.find({ user_id: user_id }).exec();
   }
+
   async getAssistantChatByUserId(user_id: string) {
     return this.model.findOne({ user_id: user_id }).exec();
   }
+
+  async getAssistantById(assistantId: string, userId: string) {
+    return this.model.findOne({ _id: assistantId, user_id: userId }).exec();
+  }
+
+  // ==================== MÉTODOS DE USUARIO ====================
 
   async crearUsuario(usuario: User): Promise<User> {
     const createdUsuario = new this.userModel(usuario);

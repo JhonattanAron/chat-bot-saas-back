@@ -18,6 +18,7 @@ import {
 import { UsersService } from "src/modules/users/users.service";
 import { User, UserSchema } from "src/modules/users/schemas/UserSchema";
 import { FaqsModule } from "src/modules/faqs/faqs.module";
+import { CustomFunctionService } from "../services/custom-function.service";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { FaqsModule } from "src/modules/faqs/faqs.module";
     PredictionService,
     ProductsService,
     UsersService,
+    CustomFunctionService,
   ],
   controllers: [ChatController],
 })
