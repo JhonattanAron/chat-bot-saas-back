@@ -4,7 +4,7 @@ import { Document, Schema as MongooseSchema } from "mongoose";
 export type FunctionSchemaDocument = FunctionSchema & Document;
 
 @Schema()
-export class FunctionSchema {
+export class FunctionItem {
   @Prop({ required: true })
   name: string;
 
@@ -74,6 +74,18 @@ export class FunctionSchema {
     value: string;
     description?: string;
   }[];
+}
+
+@Schema()
+export class FunctionSchema {
+  @Prop({ required: true })
+  user_id: string;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: "AssistantChat" })
+  assistant_id: MongooseSchema.Types.ObjectId;
+
+  @Prop({ type: [FunctionItem], required: true })
+  functions: FunctionItem[];
 }
 
 export const FunctionSchemaSchema =
