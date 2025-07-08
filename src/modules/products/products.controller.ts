@@ -1,5 +1,14 @@
 // src/products/products.controller.ts
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+} from "@nestjs/common";
 import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 
@@ -11,8 +20,69 @@ export class ProductsController {
   async search(@Query("q") query: string, @Query("user_id") userId: string) {
     return this.service.search(query, userId);
   }
+
   @Post("bulk")
   createMany(@Body() products: CreateProductDto[]) {
     return this.service.createMany(products);
+  }
+  @Post()
+  async create(
+    @Body()
+    body: {
+      name: string;
+      price: string;
+      description: string;
+      user_id: string;
+      tags?: string[];
+      available?: boolean;
+      stock?: number;
+    }
+  ) {
+    const product = {
+      ...body,
+      name:
+        `{${body.name}}{${body.price}}{${body.description}}` +
+        (body.stock !== undefined ? `${body.stock}` : ""),
+      tags: body.tags ?? [],
+      available: body.available ?? true,
+    };
+    return this.service.create(product);
+  }
+
+  @Get()
+  async findAll(@Query("user_id") user_id: string) {
+    return this.service.findAll(user_id);
+  }
+
+  @Get(":id")
+  async findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
+  @Put(":id")
+  async update(
+    @Param("id") id: string,
+    @Query("user_id") user_id: string,
+    @Body()
+    body: {
+      name: string;
+      price: string;
+      description: string;
+      tags?: string[];
+      stock?: number;
+    }
+  ) {
+    const update = {
+      ...body,
+      name:
+        `{${body.name}}{${body.price}}{${body.description}}` +
+        (body.stock !== undefined ? `${body.stock}` : ""),
+    };
+    return this.service.update(id, user_id, update);
+  }
+
+  @Delete(":id")
+  async remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 }

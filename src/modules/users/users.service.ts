@@ -13,29 +13,59 @@ import { Model } from "mongoose";
 import { User } from "./schemas/UserSchema";
 import { FunctionSchema } from "./schemas/functions-schema";
 import { CreateAssistantDto } from "./schemas/create-asistantdto";
+import { FaqsService } from "../faqs/faqs.service";
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(AssistantChat.name)
     private model: Model<AssistantChatDocument>,
-    @InjectModel(User.name) private userModel: Model<User>
+    @InjectModel(User.name) private userModel: Model<User>,
+    private readonly faqsService: FaqsService
   ) {}
 
   async createAssistantChatData(@Body() body: CreateAssistantDto) {
     // Verifica si ya existe un AssistantChat para ese usuario
     const user_id = body.user_id;
     const exists = await this.model.findOne({ user_id });
-    if (exists) {
-      throw new ConflictException(
-        "Ya existe un AssistantChat para este usuario."
-      );
-    }
+    //if (exists) {
+    //  throw new ConflictException(
+    //    "Ya existe un AssistantChat para este usuario."
+    //  );
+    //}
     const assistantChat = new this.model(body);
     await assistantChat.save();
     return assistantChat;
   }
 
+  async getAssistantChatByChatIdAndUserIdAndFaqs(id: string, user_id: string) {
+    // Buscar el chat por chat_id y user_id
+    const assistant_chat = await this.model
+      .findOne({ _id: id, user_id })
+      .exec();
+    if (!assistant_chat) {
+      throw new NotFoundException(
+        `No se encontró el chat con chat_id ${id} para el usuario ${user_id}`
+      );
+    }
+
+    const faqsDoc = await this.faqsService.getFaqs(user_id, id);
+    const faqs = (faqsDoc?.faqs ?? []).map((f) => ({
+      _id: f._id,
+      question: f.question,
+      answer: f.answer,
+      category: f.category,
+    }));
+
+    return {
+      ...assistant_chat.toObject(),
+      faqs,
+    };
+  }
+
+  async getAllAssistantChatsByUserId(user_id: string) {
+    return this.model.find({ user_id: user_id }).exec();
+  }
   async getAssistantChatByUserId(user_id: string) {
     return this.model.findOne({ user_id: user_id }).exec();
   }

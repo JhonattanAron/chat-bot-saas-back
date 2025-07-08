@@ -17,6 +17,7 @@ import {
 } from "src/modules/users/schemas/assistant-chat.schema";
 import { UsersService } from "src/modules/users/users.service";
 import { User, UserSchema } from "src/modules/users/schemas/UserSchema";
+import { FaqsModule } from "src/modules/faqs/faqs.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { User, UserSchema } from "src/modules/users/schemas/UserSchema";
       { name: AssistantChat.name, schema: AssistantChatSchema },
     ]),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    FaqsModule,
   ],
   providers: [
     ChatService,

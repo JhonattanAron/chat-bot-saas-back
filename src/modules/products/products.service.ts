@@ -57,4 +57,43 @@ export class ProductsService {
 
     return this.model.insertMany(docs);
   }
+
+  async create(product: CreateProductDto) {
+    const embedding = await getEmbedding(
+      product.name + " " + (product.tags ?? []).join(" ")
+    );
+    const doc = new this.model({ ...product, embedding });
+    return doc.save();
+  }
+
+  async findAll(user_id: string) {
+    return this.model.find({ user_id }).lean();
+  }
+
+  async findOne(id: string) {
+    return this.model.findById(id).lean();
+  }
+
+  async update(
+    id: string,
+    user_id: string,
+    update: Partial<CreateProductDto> & { embedding?: number[] }
+  ) {
+    const product = await this.model.findOne({ _id: id, user_id }).lean();
+    if (!product) {
+      throw new Error("Product not found or does not belong to user");
+    }
+    if (update.name || update.tags) {
+      const name = update.name ?? product.name ?? "";
+      const tags = update.tags ?? product.tags ?? [];
+      update.embedding = await getEmbedding(name + " " + tags.join(" "));
+    }
+    return this.model
+      .findOneAndUpdate({ _id: id, user_id }, update, { new: true })
+      .lean();
+  }
+
+  async remove(id: string) {
+    return this.model.findByIdAndDelete(id).lean();
+  }
 }

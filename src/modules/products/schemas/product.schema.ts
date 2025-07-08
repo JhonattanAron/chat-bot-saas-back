@@ -11,6 +11,9 @@ export class Product {
   @Prop({ required: true })
   name: string;
 
+  @Prop({ required: true })
+  available: boolean;
+
   @Prop({ type: [String] })
   tags: string[];
 
