@@ -1,11 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
-import {
-  AssistantChat,
-  AssistantChatDocument,
-} from "src/modules/users/schemas/assistant-chat.schema";
-import { ConfigService } from "@nestjs/config";
+import type { Model } from "mongoose";
+import type { AssistantChatDocument } from "src/modules/users/schemas/assistant-chat.schema";
+import { AssistantChat } from "src/modules/users/schemas/assistant-chat.schema";
 
 interface FunctionExecution {
   success: boolean;
@@ -19,8 +16,8 @@ export class CustomFunctionService {
   private readonly logger = new Logger(CustomFunctionService.name);
 
   constructor(
-    private assistantChatModel: Model<AssistantChatDocument>,
-    private configService: ConfigService
+    @InjectModel(AssistantChat.name)
+    private readonly assistantChatModel: Model<AssistantChatDocument>
   ) {}
 
   async executeFunction(
@@ -41,6 +38,9 @@ export class CustomFunctionService {
       });
 
       if (!assistant) {
+        this.logger.error(
+          `Assistant not found for userId: ${userId}, assistantId: ${assistantId}`
+        );
         return {
           success: false,
           error: "Assistant not found",
@@ -49,21 +49,55 @@ export class CustomFunctionService {
         };
       }
 
-      // Buscar la función específica
-      const functionDef = assistant.funciones.find(
-        (func) => func.name.toUpperCase() === functionName.toUpperCase()
+      this.logger.log(
+        `Found assistant with ${assistant.funciones?.length || 0} functions`
       );
 
-      if (!functionDef) {
+      // Validar que existan funciones
+      if (!assistant.funciones || assistant.funciones.length === 0) {
+        this.logger.warn(`No functions found for assistant ${assistantId}`);
         return {
           success: false,
-          error: `Function ${functionName} not found`,
+          error: "No functions available for this assistant",
           result: null,
           executedFunction: functionName,
         };
       }
 
-      this.logger.log(`Found function definition:`, functionDef);
+      // Log de todas las funciones disponibles para debugging
+      assistant.funciones.forEach((func, index) => {
+        this.logger.log(
+          `Function ${index}: name="${func?.name}", type="${func?.type}"`
+        );
+      });
+
+      // Buscar la función específica en el array de funciones con validación
+      const functionDef = assistant.funciones.find((func) => {
+        if (!func || !func.name) {
+          this.logger.warn(`Found function with undefined name at index`);
+          return false;
+        }
+        return func.name.toUpperCase() === functionName.toUpperCase();
+      });
+
+      if (!functionDef) {
+        this.logger.error(
+          `Function ${functionName} not found. Available functions: ${assistant.funciones.map((f) => f?.name || "undefined").join(", ")}`
+        );
+        return {
+          success: false,
+          error: `Function ${functionName} not found. Available functions: ${assistant.funciones.map((f) => f?.name || "undefined").join(", ")}`,
+          result: null,
+          executedFunction: functionName,
+        };
+      }
+
+      this.logger.log(`Found function definition:`, {
+        name: functionDef.name,
+        type: functionDef.type,
+        hasApi: !!functionDef.api,
+        hasCode: !!functionDef.code,
+      });
 
       // Ejecutar según el tipo de función
       if (functionDef.type === "api") {
@@ -110,17 +144,23 @@ export class CustomFunctionService {
         "Content-Type": "application/json",
       };
 
-      if (api.headers) {
+      if (api.headers && Array.isArray(api.headers)) {
         api.headers.forEach((header: any) => {
-          headers[header.key] = header.value;
+          if (header && header.key && header.value) {
+            headers[header.key] = header.value;
+          }
         });
       }
 
       // Preparar el cuerpo de la petición con los parámetros
       const body: Record<string, any> = {};
-      if (api.parameters && parameters.length > 0) {
+      if (
+        api.parameters &&
+        Array.isArray(api.parameters) &&
+        parameters.length > 0
+      ) {
         api.parameters.forEach((param: any, index: number) => {
-          if (index < parameters.length) {
+          if (param && param.name && index < parameters.length) {
             body[param.name] = parameters[index].trim();
           }
         });
@@ -128,6 +168,7 @@ export class CustomFunctionService {
 
       this.logger.log(`Making API call to: ${api.url}`);
       this.logger.log(`Method: ${api.method}`);
+      this.logger.log(`Headers:`, headers);
       this.logger.log(`Body:`, body);
 
       // Realizar la petición HTTP
@@ -138,7 +179,12 @@ export class CustomFunctionService {
           api.method.toUpperCase() !== "GET" ? JSON.stringify(body) : undefined,
       });
 
-      const responseData = await response.json();
+      let responseData: any;
+      try {
+        responseData = await response.json();
+      } catch {
+        responseData = await response.text();
+      }
 
       if (!response.ok) {
         return {
@@ -170,8 +216,6 @@ export class CustomFunctionService {
     parameters: string[]
   ): Promise<FunctionExecution> {
     try {
-      // Para funciones custom, podríamos usar un sandbox más avanzado
-      // Por ahora, simulamos la ejecución
       this.logger.log(`Executing custom function: ${functionDef.name}`);
       this.logger.log(`Code: ${functionDef.code}`);
       this.logger.log(`Parameters: ${parameters.join(", ")}`);
@@ -182,6 +226,7 @@ export class CustomFunctionService {
         message: `Custom function ${functionDef.name} executed successfully`,
         parameters: parameters,
         timestamp: new Date().toISOString(),
+        code: functionDef.code,
       };
 
       return {
@@ -207,16 +252,22 @@ export class CustomFunctionService {
         user_id: userId,
       });
 
-      if (!assistant) {
+      if (!assistant || !assistant.funciones) {
+        this.logger.warn(
+          `No assistant or functions found for userId: ${userId}, assistantId: ${assistantId}`
+        );
         return [];
       }
 
-      return assistant.funciones.map((func) => ({
-        name: func.name,
-        description: func.description,
-        type: func.type,
-        parameters: func.api?.parameters || [],
-      }));
+      // Filtrar funciones válidas y mapear
+      return assistant.funciones
+        .filter((func) => func && func.name && func.type) // Solo funciones válidas
+        .map((func) => ({
+          name: func.name,
+          description: func.description || "",
+          type: func.type,
+          parameters: func.api?.parameters || [],
+        }));
     } catch (error) {
       this.logger.error(`Error getting functions list:`, error);
       return [];
@@ -238,6 +289,10 @@ export class CustomFunctionService {
 
     // Dividir parámetros por coma y limpiar espacios
     const parameters = parametersString.split(",").map((param) => param.trim());
+
+    this.logger.log(
+      `Parsed function call: ${functionName} with parameters: [${parameters.join(", ")}]`
+    );
 
     return {
       functionName,

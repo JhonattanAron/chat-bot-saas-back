@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
-import { FunctionSchema } from "./functions-schema";
+import type { Document } from "mongoose";
+import { FunctionItem, FunctionItemSchema } from "./functions-schema";
 
 export type AssistantChatDocument = AssistantChat & Document;
 
@@ -15,8 +15,8 @@ export class AssistantChat {
   @Prop({ required: true })
   description: string;
 
-  @Prop({ type: () => [FunctionSchema], required: true })
-  funciones: FunctionSchema[];
+  @Prop({ type: [FunctionItemSchema], default: [] })
+  funciones: FunctionItem[];
 
   @Prop({ required: true })
   status: string;
