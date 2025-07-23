@@ -42,54 +42,26 @@ export class ChatService {
       );
     }
 
-    this.logger.log(`=== STARTING CHAT ===`);
-    this.logger.log(`User: ${userId}`);
-    this.logger.log(`Assistant: ${assistantId} (${context.name})`);
-    this.logger.log(`Prompt: ${promt}`);
-
     // Obtener funciones disponibles del asistente específico
     const availableFunctions =
       await this.customFunctionService.getFunctionsList(userId, assistantId);
 
-    this.logger.log(`Available functions: ${availableFunctions.length}`);
     availableFunctions.forEach((func) => {
       this.logger.log(`- ${func.name}: ${func.description}`);
     });
 
-    // Paso 1: Analizar intención y ejecutar funciones
-    const analysisPrompt = this.promptGen.generateInitialPromt(
+    // Paso 1: Analizar intención y ejecutar funciones (PRIMERA PREDICCIÓN)
+    const analysisPrompt = this.promptGen.generateAnalysisPrompt(
       context.name,
       context.description,
       availableFunctions,
       promt
     );
 
-    this.logger.log("=== ANALYSIS PROMPT ===");
-    this.logger.log(analysisPrompt);
-
     const analysisPrediction =
       await this.predictionService.predict(analysisPrompt);
     input_tokens += analysisPrediction.input_tokens || 0;
     output_tokens += analysisPrediction.output_tokens || 0;
-
-    this.logger.log("=== ANALYSIS RESPONSE ===");
-    this.logger.log(analysisPrediction.output);
-
-    // DEBUGGING: Verificar qué patrones encuentra
-    this.logger.log("=== PATTERN DETECTION ===");
-    const searchMatch = analysisPrediction.output.match(/\[SEARCH:([^\]]+)\]/);
-    const faqMatch = analysisPrediction.output.match(/\[FAQ:([^\]]+)\]/);
-    const functionMatch = analysisPrediction.output.match(
-      /\[([A-Z_]+):([^\]]*)\]/
-    );
-
-    this.logger.log(
-      `SEARCH pattern found: ${searchMatch ? searchMatch[0] : "NO"}`
-    );
-    this.logger.log(`FAQ pattern found: ${faqMatch ? faqMatch[0] : "NO"}`);
-    this.logger.log(
-      `Function pattern found: ${functionMatch ? functionMatch[0] : "NO"}`
-    );
 
     // Procesar funciones identificadas
     const processedResult = await this.processModelResponse(
@@ -98,26 +70,23 @@ export class ChatService {
       assistantId
     );
 
-    this.logger.log("=== PROCESSED RESULT ===");
-    this.logger.log(JSON.stringify(processedResult, null, 2));
-
-    // Paso 2: Generar respuesta final con información recopilada
-    const finalPrompt = this.promptGen.generateContextualPrompt("", promt, {
-      faqInfo: processedResult.faqInfo,
-      productosString: processedResult.productosString,
-      carrito: "",
-      functionResults: processedResult.functionResults,
-    });
-
-    this.logger.log("=== FINAL PROMPT ===");
-    this.logger.log(finalPrompt);
+    // Paso 2: Generar respuesta final con información recopilada (SEGUNDA PREDICCIÓN)
+    const finalPrompt = this.promptGen.generateContextualPrompt(
+      context.name, // Pass assistant name
+      context.description, // Pass assistant description
+      "", // No memory context for the very first message
+      promt,
+      {
+        faqInfo: processedResult.faqInfo,
+        productosString: processedResult.productosString,
+        carrito: "", // Not implemented yet
+        functionResults: processedResult.functionResults,
+      }
+    );
 
     const finalPrediction = await this.predictionService.predict(finalPrompt);
     input_tokens += finalPrediction.input_tokens || 0;
     output_tokens += finalPrediction.output_tokens || 0;
-
-    this.logger.log("=== FINAL RESPONSE ===");
-    this.logger.log(finalPrediction.output);
 
     // Procesar respuesta final
     const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
@@ -131,17 +100,13 @@ export class ChatService {
       processedResult.funcionesEjecutadas
     );
 
-    this.logger.log("=== FINAL CLEANED RESPONSE ===");
-    this.logger.log("Cleaned:", cleanedResponse);
-    this.logger.log("Important Info:", completeImportantInfo);
-
     // Guardar mensajes
     const messages = [
       {
         role: "user" as const,
         content: promt,
         createdAt: new Date(),
-        important_info: "",
+        important_info: "", // User messages don't have important_info
       },
       {
         role: "assistant" as const,
@@ -168,13 +133,13 @@ export class ChatService {
     role: "user" | "assistant",
     content: string
   ) {
-    const chat = await this.chatModel.findOne({ $or: [{ _id: chatId }] });
+    const chat = await this.chatModel.findOne({ _id: chatId });
     if (!chat) throw new Error(`Chat with chatId ${chatId} not found`);
 
     if (role === "user") {
       // Guardar mensaje del usuario
       await this.chatModel.findOneAndUpdate(
-        { $or: [{ _id: chatId }] },
+        { _id: chatId },
         {
           $push: {
             messages: {
@@ -208,29 +173,18 @@ export class ChatService {
       // Construir contexto de memoria mejorado
       const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
 
-      this.logger.log("=== MEMORY CONTEXT ===");
-      this.logger.log(memoryContext);
-
-      // Paso 1: Analizar intención del nuevo mensaje
-      const analysisPrompt = this.promptGen.generateMessagePromt(
-        memoryContext,
-        "",
-        "",
-        "",
-        content,
-        availableFunctions
+      // Paso 1: Analizar intención del nuevo mensaje (PRIMERA PREDICCIÓN)
+      const analysisPrompt = this.promptGen.generateAnalysisPrompt(
+        context.name,
+        context.description,
+        availableFunctions,
+        content
       );
-
-      this.logger.log("=== ANALYSIS PROMPT (ADD MESSAGE) ===");
-      this.logger.log(analysisPrompt);
 
       const analysisPrediction =
         await this.predictionService.predict(analysisPrompt);
       let input_tokens = analysisPrediction.input_tokens || 0;
       let output_tokens = analysisPrediction.output_tokens || 0;
-
-      this.logger.log("=== ANALYSIS RESPONSE (ADD MESSAGE) ===");
-      this.logger.log(analysisPrediction.output);
 
       // Procesar funciones identificadas
       const processedResult = await this.processModelResponse(
@@ -239,17 +193,16 @@ export class ChatService {
         assistantId
       );
 
-      this.logger.log("=== PROCESSED RESULT (ADD MESSAGE) ===");
-      this.logger.log(JSON.stringify(processedResult, null, 2));
-
-      // Paso 2: Generar respuesta final
+      // Paso 2: Generar respuesta final (SEGUNDA PREDICCIÓN)
       const finalPrompt = this.promptGen.generateContextualPrompt(
+        context.name, // Pass assistant name
+        context.description, // Pass assistant description
         memoryContext,
         content,
         {
           faqInfo: processedResult.faqInfo,
           productosString: processedResult.productosString,
-          carrito: "",
+          carrito: "", // Not implemented yet
           functionResults: processedResult.functionResults,
         }
       );
@@ -257,9 +210,6 @@ export class ChatService {
       const finalPrediction = await this.predictionService.predict(finalPrompt);
       input_tokens += finalPrediction.input_tokens || 0;
       output_tokens += finalPrediction.output_tokens || 0;
-
-      this.logger.log("=== FINAL RESPONSE (ADD MESSAGE) ===");
-      this.logger.log(finalPrediction.output);
 
       // Procesar respuesta final
       const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
@@ -275,7 +225,7 @@ export class ChatService {
 
       // Guardar respuesta del asistente
       await this.chatModel.findOneAndUpdate(
-        { $or: [{ _id: chatId }] },
+        { _id: chatId },
         {
           $push: {
             messages: {
@@ -294,7 +244,7 @@ export class ChatService {
       );
     }
 
-    return this.chatModel.findOne({ $or: [{ _id: chatId }] });
+    return this.chatModel.findOne({ _id: chatId });
   }
 
   async getChat(chatId: string) {
@@ -317,62 +267,51 @@ export class ChatService {
     const functionResults: any[] = [];
     const funcionesEjecutadas: string[] = [];
 
-    this.logger.log("=== PROCESSING MODEL RESPONSE ===");
-    this.logger.log("Raw response:", response);
-
     // Buscar FAQ directamente en el texto
     const faqMatch = response.match(/\[FAQ:([^\]]+)\]/);
+
     if (faqMatch) {
       const faqQuery = faqMatch[1].trim();
       funcionesEjecutadas.push(`[FAQ:${faqQuery}]`);
-      this.logger.log("=== EXECUTING FAQ SEARCH ===");
-      this.logger.log("FAQ Query:", faqQuery);
 
       const faqResults = await this.faqsService.search(
         faqQuery,
         userId,
         assistantId
       );
-      this.logger.log("FAQ Results:", faqResults);
 
       if (faqResults && faqResults.length > 0) {
         faqInfo = faqResults[0].answer;
-        this.logger.log("FAQ Info found:", faqInfo);
       } else {
-        this.logger.log("No FAQ results found");
+        faqInfo = "No se encontró información de FAQ para esa pregunta.";
       }
     }
 
     // Buscar SEARCH directamente en el texto
     const searchMatch = response.match(/\[SEARCH:([^\]]+)\]/);
+
     if (searchMatch) {
       const searchTerm = searchMatch[1].trim();
       funcionesEjecutadas.push(`[SEARCH:${searchTerm}]`);
-      this.logger.log("=== EXECUTING PRODUCT SEARCH ===");
-      this.logger.log("Search Term:", searchTerm);
 
       const relatedProducts = await this.productSearchService.search(
         searchTerm,
         userId
       );
-      this.logger.log("Product Results:", relatedProducts);
 
       if (relatedProducts.length === 0) {
         productosString = "No se encontraron productos con ese término.";
       } else {
         productosString = relatedProducts.map((p) => p.name).join(", ");
       }
-      this.logger.log("Products String:", productosString);
     }
 
     // Buscar y ejecutar funciones personalizadas
     const functionCall = this.customFunctionService.parseFunctionCall(response);
-    if (functionCall) {
-      this.logger.log("=== EXECUTING CUSTOM FUNCTION ===");
-      this.logger.log("Function:", functionCall.functionName);
-      this.logger.log("Parameters:", functionCall.parameters);
 
-      // Validar que no sea una función del sistema (SEARCH, FAQ)
+    if (functionCall) {
+      // Validar que no sea una función del sistema (SEARCH, FAQ, IMPORTANT_INFO)
+      // These are handled above or are meta-tags.
       if (
         !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(functionCall.functionName)
       ) {
@@ -383,38 +322,30 @@ export class ChatService {
           assistantId
         );
 
-        this.logger.log(
-          "Function Result:",
-          JSON.stringify(functionResult, null, 2)
-        );
-
         functionResults.push(functionResult);
         funcionesEjecutadas.push(
           `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`
         );
       } else {
         this.logger.log(
-          `Skipping system function: ${functionCall.functionName}`
+          `Skipping system function in custom function execution check: ${functionCall.functionName}`
         );
       }
     } else {
       this.logger.log("No custom function call found in response");
     }
 
-    // Extraer IMPORTANT_INFO
-    const importantInfo = this.extractImportantInfo(response);
-    this.logger.log("Important Info extracted:", importantInfo);
+    // Extraer IMPORTANT_INFO from the analysis response (if present, though it should be in final response)
+    // This is now primarily extracted from the *final* prediction.
+    const importantInfoFromAnalysis = this.extractImportantInfo(response);
 
     const result = {
       faqInfo,
       productosString,
       functionResults,
       funcionesEjecutadas,
-      importantInfo,
+      importantInfo: importantInfoFromAnalysis, // This will likely be empty or a placeholder from analysis prompt
     };
-
-    this.logger.log("=== FINAL PROCESSED RESULT ===");
-    this.logger.log(JSON.stringify(result, null, 2));
 
     return result;
   }
@@ -425,13 +356,13 @@ export class ChatService {
   }
 
   private cleanModelResponse(response: string): string {
+    // Remove all known tags from the final response to the user
     return response
       .replace(/\[FAQ:.*?\]/gi, "")
       .replace(/\[SEARCH:.*?\]/gi, "")
-      .replace(/\[[A-Z_]+:.*?\]/gi, "") // Remover funciones personalizadas
-      .replace(/\[FUNCTIONS:.*?\]/gi, "")
+      .replace(/\[[A-Z_]+:.*?\]/gi, "") // Remove custom functions and other tags like FUNCTIONS_EJECUTADAS
       .replace(/\[IMPORTANT_INFO:.*?\]/gi, "")
-      .replace(/Respuesta:\s*/gi, "")
+      .replace(/Respuesta:\s*/gi, "") // Remove any "Respuesta:" prefix if model adds it
       .trim();
   }
 
@@ -442,41 +373,61 @@ export class ChatService {
     const funcionesStr = funcionesEjecutadas.length
       ? ` [FUNCIONES_EJECUTADAS: ${funcionesEjecutadas.join(" ")}]`
       : "";
-    return `[IMPORTANT_INFO: ${importantInfo}${funcionesStr}]`;
+    // Ensure importantInfo is not empty or just a placeholder like "lo_que_necesita"
+    const finalImportantInfoContent =
+      importantInfo && importantInfo !== "lo_que_necesita"
+        ? importantInfo
+        : "información general"; // Default if model doesn't provide specific info
+
+    return `[IMPORTANT_INFO: ${finalImportantInfoContent}${funcionesStr}]`;
   }
 
   private buildEnhancedMemoryContext(messages: any[]): string {
     const memoryParts: string[] = [];
 
-    // Obtener los últimos 4 mensajes (2 intercambios) para mejor contexto
-    const recentMessages = messages.slice(-4);
+    // Get the last 4 messages (2 user-assistant exchanges) for better context
+    // Filter out user messages that don't have important_info (which they shouldn't)
+    const recentMessages = messages
+      .filter(
+        (msg) =>
+          msg.role === "assistant" ||
+          (msg.role === "user" && messages.indexOf(msg) > messages.length - 5)
+      )
+      .slice(-4);
 
     for (let i = 0; i < recentMessages.length; i += 2) {
       const userMsg = recentMessages[i];
       const assistantMsg = recentMessages[i + 1];
 
-      if (userMsg && assistantMsg) {
+      if (
+        userMsg &&
+        assistantMsg &&
+        userMsg.role === "user" &&
+        assistantMsg.role === "assistant"
+      ) {
         const userContent = userMsg.content || "";
-        const assistantContent = assistantMsg.content || "";
-        const importantInfo = assistantMsg.important_info || "";
+        const assistantImportantInfo = assistantMsg.important_info || "";
 
-        // Extraer información clave del important_info
-        let contextInfo = "";
-        if (importantInfo.includes("FUNCIONES_EJECUTADAS")) {
-          const funcionesMatch = importantInfo.match(
-            /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/
-          );
-          if (funcionesMatch) {
-            contextInfo = funcionesMatch[1];
-          }
+        // Extract main info and executed functions from assistant's important_info
+        let mainInfo = "";
+        let functionsUsed = "";
+
+        const mainInfoMatch = assistantImportantInfo.match(
+          /\[IMPORTANT_INFO: ([^[]+)/
+        );
+        if (mainInfoMatch && mainInfoMatch[1].trim() !== "lo_que_necesita") {
+          mainInfo = mainInfoMatch[1].trim();
         }
 
-        // Extraer el tema principal del important_info
-        const mainInfoMatch = importantInfo.match(/\[IMPORTANT_INFO: ([^[]+)/);
-        const mainInfo = mainInfoMatch ? mainInfoMatch[1].trim() : "";
+        const functionsMatch = assistantImportantInfo.match(
+          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/
+        );
+        if (functionsMatch) {
+          functionsUsed = functionsMatch[1];
+        }
 
         memoryParts.push(
-          `Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo} | Funciones usadas: ${contextInfo}`
+          `Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo || "información general"} | Funciones usadas: ${functionsUsed || "ninguna"}`
         );
       }
     }
