@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Replicate from "replicate";
+import { encode } from "gpt-tokenizer";
 
 @Injectable()
 export class PredictionService {
@@ -10,6 +11,10 @@ export class PredictionService {
     this.replicate = new Replicate({
       auth: this.configService.get<string>("REPLICATE_API_TOKEN"),
     });
+  }
+
+  private countTokens(text: string): number {
+    return encode(text).length;
   }
 
   async predict(prompt: string): Promise<any> {
@@ -32,11 +37,15 @@ export class PredictionService {
       result += event.toString();
     }
 
+    const inputTokens = this.countTokens(prompt);
+    const outputTokens = this.countTokens(result);
+    const totalTokens = inputTokens + outputTokens;
+
     return {
       output: result.trim(),
-      tokens: 0,
-      input_tokens: 0,
-      output_tokens: 0,
+      tokens: totalTokens,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
     };
   }
 }

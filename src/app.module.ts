@@ -10,7 +10,9 @@ import { UsersController } from "./modules/users/users.controller";
 import { UsersModule } from "./modules/users/users.module";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./modules/auth/auth.module";
-import { FaqsModule } from './modules/faqs/faqs.module';
+import { FaqsModule } from "./modules/faqs/faqs.module";
+import { ApiKeyValidateService } from "./modules/api-key-validate/api-key-validate.service";
+import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validate.module";
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { FaqsModule } from './modules/faqs/faqs.module';
     UsersModule,
     AuthModule,
     FaqsModule,
+    ApiKeyValidateModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

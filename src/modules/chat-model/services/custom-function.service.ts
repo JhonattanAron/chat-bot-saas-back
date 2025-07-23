@@ -152,31 +152,56 @@ export class CustomFunctionService {
         });
       }
 
-      // Preparar el cuerpo de la petición con los parámetros
-      const body: Record<string, any> = {};
-      if (
-        api.parameters &&
-        Array.isArray(api.parameters) &&
-        parameters.length > 0
-      ) {
-        api.parameters.forEach((param: any, index: number) => {
-          if (param && param.name && index < parameters.length) {
-            body[param.name] = parameters[index].trim();
-          }
-        });
+      let requestUrl = api.url;
+      let requestBody: string | undefined;
+
+      // Handle parameters based on method type
+      if (api.method.toUpperCase() === "GET") {
+        const queryParams = new URLSearchParams();
+        if (
+          api.parameters &&
+          Array.isArray(api.parameters) &&
+          parameters.length > 0
+        ) {
+          api.parameters.forEach((param: any, index: number) => {
+            if (param && param.name && index < parameters.length) {
+              queryParams.append(param.name, parameters[index].trim());
+            }
+          });
+        }
+        const queryString = queryParams.toString();
+        if (queryString) {
+          requestUrl = `${api.url}?${queryString}`;
+        }
+      } else {
+        // For POST, PUT, etc., send parameters in the body
+        const body: Record<string, any> = {};
+        if (
+          api.parameters &&
+          Array.isArray(api.parameters) &&
+          parameters.length > 0
+        ) {
+          api.parameters.forEach((param: any, index: number) => {
+            if (param && param.name && index < parameters.length) {
+              body[param.name] = parameters[index].trim();
+            }
+          });
+        }
+        requestBody = JSON.stringify(body);
       }
 
-      this.logger.log(`Making API call to: ${api.url}`);
+      this.logger.log(`Making API call to: ${requestUrl}`);
       this.logger.log(`Method: ${api.method}`);
       this.logger.log(`Headers:`, headers);
-      this.logger.log(`Body:`, body);
+      if (requestBody) {
+        this.logger.log(`Body:`, requestBody);
+      }
 
       // Realizar la petición HTTP
-      const response = await fetch(api.url, {
+      const response = await fetch(requestUrl, {
         method: api.method.toUpperCase(),
         headers,
-        body:
-          api.method.toUpperCase() !== "GET" ? JSON.stringify(body) : undefined,
+        body: requestBody,
       });
 
       let responseData: any;

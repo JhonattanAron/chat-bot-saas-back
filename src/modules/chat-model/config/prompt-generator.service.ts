@@ -2,103 +2,70 @@ import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class PromptGeneratorService {
-  generateInitialPromt(
-    name = "",
-    description = "",
+  // Prompt para el análisis inicial de intención y función (no genera respuesta natural)
+  generateAnalysisPrompt(
+    contextName: string,
+    contextDescription: string,
     availableFunctions: any[] = [],
-    promt = ""
+    userPrompt: string
   ): string {
     const functionsDescription =
       this.formatFunctionsForPrompt(availableFunctions);
 
     const systemPrompt = `
-Analiza esta pregunta y responde EXACTAMENTE en este formato:
+Eres un asistente inteligente. Tu tarea es analizar la siguiente pregunta del usuario y determinar la INTENCIÓN principal.
+Basado en la intención, debes identificar si se necesita ejecutar una función (SEARCH, FAQ, o una función personalizada).
 
-PREGUNTA: "${promt}"
+Responde EXCLUSIVAMENTE en el siguiente formato, sin añadir ningún otro texto:
+[FUNCIÓN_IDENTIFICADA:parámetros], [IMPORTANT_INFO:descripción_corta_de_la_intención_o_acción]
 
-REGLAS CRÍTICAS:
-1. PRODUCTOS/INVENTARIO (buscar qué tienes/vendes) → [SEARCH:término]
-   - "tienes ropa?", "venden zapatos?", "hay productos?", "ropa de invierno?"
-   
-2. INFORMACIÓN/SERVICIOS (cómo hacer algo, políticas, contacto) → [FAQ:pregunta]
-   - "cómo programar cita?", "horarios?", "política de devolución?", "contacto?"
+REGLAS CRÍTICAS PARA LA FUNCIÓN_IDENTIFICADA:
+1. **BÚSQUEDA DE PRODUCTOS/INVENTARIO**: Si el usuario pregunta sobre qué tienes, qué vendes, disponibilidad de productos, etc.
+   → Usa: [SEARCH:término_de_búsqueda]
+   **Optimiza el query de búsqueda, extrayendo palabras clave relevantes o sinónimos para mejorar la precisión.**
+   Ejemplos:
+   - "tienes ropa?" → [SEARCH:ropa], [IMPORTANT_INFO:busca ropa]
+   - "venden zapatos?" → [SEARCH:zapatos], [IMPORTANT_INFO:busca zapatos]
+   - "ropa para el frío" → [SEARCH:chaquetas invierno], [IMPORTANT_INFO:busca ropa de invierno]
 
-3. FUNCIONES ESPECÍFICAS → Usar función exacta
+2. **INFORMACIÓN GENERAL/SERVICIOS (FAQs)**: Si el usuario pregunta cómo hacer algo, sobre políticas, horarios, contacto, etc.
+   → Usa: [FAQ:pregunta_específica_para_FAQ]
+   Ejemplos:
+   - "cómo programar cita?" → [FAQ:programar cita], [IMPORTANT_INFO:info sobre citas]
+   - "horarios?" → [FAQ:horarios], [IMPORTANT_INFO:consulta horarios]
+
+3. **FUNCIONES PERSONALIZADAS**: Si la intención del usuario coincide con una de las funciones disponibles.
+   **Asegúrate de que los parámetros sean específicos y relevantes para la función.**
+   **Los parámetros deben ser extraídos de la pregunta del usuario y listados en el orden correcto, separados por comas (,) dentro del corchete.**
+
 ${functionsDescription}
 
-EJEMPLOS EXACTOS:
-❌ INCORRECTO: "tienes ropa de invierno?" → [FAQ:ropa invierno]
-✅ CORRECTO: "tienes ropa de invierno?" → [SEARCH:ropa invierno], [IMPORTANT_INFO:busca ropa invierno]
+EJEMPLOS DE RESPUESTA:
+- Usuario: "busco zapatos rojos"
+  Respuesta: [SEARCH:zapatos rojos], [IMPORTANT_INFO:busca zapatos]
+- Usuario: "cómo contactarlos?"
+  Respuesta: [FAQ:contacto], [IMPORTANT_INFO:info contacto]
+- Usuario: "dime el clima de hoy en Madrid"
+  Respuesta: [OBTENER_CLIMA:Madrid], [IMPORTANT_INFO:consulta clima Madrid]
+- Usuario: "envía un correo a soporte@ejemplo.com con el asunto 'Problema' y el mensaje 'Mi producto no funciona'"
+  Respuesta: [ENVIAR_CORREO:soporte@ejemplo.com, Problema, Mi producto no funciona], [IMPORTANT_INFO:enviar correo de soporte]
 
-❌ INCORRECTO: "cómo programar cita?" → [SEARCH:programar cita]  
-✅ CORRECTO: "cómo programar cita?" → [FAQ:programar cita], [IMPORTANT_INFO:info sobre citas]
+CLAVE:
+- Si la intención es QUÉ TIENES/VENDES = SEARCH
+- Si la intención es CÓMO HACER ALGO = FAQ
+- Si la intención es una ACCIÓN ESPECÍFICA = FUNCIÓN PERSONALIZADA
 
-✅ CORRECTO: "envía correo a test@email.com asunto Hola mensaje Prueba" → [ENVIAR_CORREO:test@email.com, Hola, Prueba], [IMPORTANT_INFO:enviar correo]
+PREGUNTA DEL USUARIO: "${userPrompt}"
 
-CLAVE: 
-- Si pregunta QUÉ TIENES/VENDES = SEARCH
-- Si pregunta CÓMO HACER ALGO = FAQ
-
-RESPONDE AHORA:
+RESPUESTA (SOLO EL FORMATO REQUERIDO):
 `;
     return systemPrompt;
   }
 
-  generateMessagePromt(
-    memoryContext = "",
-    faqInfo = "",
-    productosString = "",
-    carrito = "",
-    userMessage = "",
-    availableFunctions: any[] = []
-  ): string {
-    const functionsDescription =
-      this.formatFunctionsForPrompt(availableFunctions);
-
-    // Si no hay información de FAQ ni productos, es para análisis inicial
-    if (!faqInfo && !productosString) {
-      const analysisPrompt = `
-CONTEXTO PREVIO: ${memoryContext}
-MENSAJE ACTUAL: "${userMessage}"
-
-REGLAS CRÍTICAS:
-- BUSCAR PRODUCTOS/INVENTARIO → [SEARCH:término]
-  Ejemplos: "tienes X?", "venden Y?", "hay Z?", "productos de..."
-  
-- INFORMACIÓN/SERVICIOS → [FAQ:pregunta]  
-  Ejemplos: "cómo hacer X?", "horarios?", "política de Y?", "contacto?"
-
-FUNCIONES PERSONALIZADAS:
-${functionsDescription}
-
-FORMATO OBLIGATORIO:
-[FUNCIÓN_CORRECTA:parámetros], [IMPORTANT_INFO:intención]
-Mensaje al usuario.
-
-EJEMPLOS:
-- "busco zapatos rojos" → [SEARCH:zapatos rojos], [IMPORTANT_INFO:busca zapatos] \n Buscando zapatos rojos.
-- "cómo contactarlos?" → [FAQ:contacto], [IMPORTANT_INFO:info contacto] \n Buscando información de contacto.
-
-RESPONDE:
-    `;
-      return analysisPrompt;
-    }
-
-    // Si hay información, generar respuesta final
-    const finalPrompt = `
-CONTEXTO: ${memoryContext}
-INFORMACIÓN OBTENIDA:
-FAQ: ${faqInfo || "Sin información"}
-PRODUCTOS: ${productosString || "Sin productos"}
-MENSAJE: "${userMessage}"
-
-Responde naturalmente con la información disponible.
-Termina con: [IMPORTANT_INFO:descripción]
-  `;
-    return finalPrompt;
-  }
-
+  // Prompt para generar la respuesta natural final al usuario
   generateContextualPrompt(
+    assistantName: string,
+    assistantDescription: string,
     memoryContext: string,
     currentUserMessage: string,
     availableInfo: {
@@ -118,38 +85,80 @@ Termina con: [IMPORTANT_INFO:descripción]
     const functionResultsText = functionResults
       .map((result) => {
         if (result.success) {
-          return `✅ ${result.executedFunction}: Ejecutado correctamente`;
+          return `✅ Función '${result.executedFunction}' ejecutada con éxito. Resultado: ${JSON.stringify(result.result)}`;
         } else {
-          return `❌ ${result.executedFunction}: Error - ${result.error}`;
+          return `❌ Función '${result.executedFunction}' falló. Error: ${result.error}`;
         }
       })
       .join("\n");
 
+    let productResponseInstruction = "";
+    const noProductsFound =
+      productosString === "No se encontraron productos con ese término.";
+    const generalProductInquiryWithoutSearch =
+      !productosString &&
+      currentUserMessage.toLowerCase().includes("productos") &&
+      !functionResults.some((f) => f.executedFunction.includes("SEARCH"));
+
+    if (noProductsFound || generalProductInquiryWithoutSearch) {
+      productResponseInstruction = `
+- Si la búsqueda de productos no arrojó resultados o el usuario preguntó por productos en general sin especificar, NO digas 'no tengo información' o 'no hay productos'. En su lugar, como ${assistantName}, pregunta al usuario qué tipo de producto específico está buscando o qué características le interesan para poder realizar una búsqueda más precisa.
+- Ejemplo: "No encontré productos con esa descripción. Como tu asistente de compras, puedo ayudarte a buscar algo específico. ¿Qué tipo de producto te gustaría encontrar o qué características buscas?"
+- Ejemplo para pregunta general: "Claro, como tu asistente de compras, puedo ayudarte a encontrar lo que necesitas. ¿Qué tipo de producto te gustaría encontrar o qué características buscas?"
+`;
+    }
+
     return `
-CONTEXTO: ${memoryContext}
-MENSAJE: "${currentUserMessage}"
+Eres ${assistantName}, un asistente de ${assistantDescription}.
+CONTEXTO DE CONVERSACIÓN PREVIA: ${memoryContext}
+MENSAJE ACTUAL DEL USUARIO: "${currentUserMessage}"
 
-INFORMACIÓN DISPONIBLE:
-${faqInfo ? `FAQ: ${faqInfo}` : "FAQ: Sin información"}
-${productosString ? `PRODUCTOS: ${productosString}` : "PRODUCTOS: Sin productos"}
-${functionResultsText ? `FUNCIONES: ${functionResultsText}` : ""}
+INFORMACIÓN RECOPILADA PARA LA RESPUESTA:
+${faqInfo ? `INFORMACIÓN DE FAQ: ${faqInfo}` : "INFORMACIÓN DE FAQ: No se encontró información relevante."}
+${productosString ? `PRODUCTOS ENCONTRADOS: ${productosString}` : "PRODUCTOS ENCONTRADOS: No se encontraron productos."}
+${functionResultsText ? `RESULTADOS DE FUNCIONES EJECUTADAS:\n${functionResultsText}` : "FUNCIONES EJECUTADAS: Ninguna."}
 
-Responde de forma natural y útil.
-Termina con: [IMPORTANT_INFO:lo_que_necesita]
-    `;
+Instrucciones para la respuesta:
+- Responde de forma natural, amigable y útil al usuario, utilizando la información recopilada y tu rol como ${assistantName}.
+- Si se ejecutó una función, menciona el resultado de manera concisa.
+- Si no se encontró información relevante (FAQ o Productos), informa al usuario de manera cortés.
+${productResponseInstruction}
+- NO incluyas los tags [SEARCH:...], [FAQ:...], [ENVIAR_CORREO:...], etc., en tu respuesta final.
+- Termina tu respuesta con un tag [IMPORTANT_INFO:resumen_claro_de_la_respuesta_o_acción_principal]. Este resumen es para el sistema, no para el usuario.
+
+RESPUESTA AL USUARIO:
+`;
   }
 
+  // Este método solo llama a generateAnalysisPrompt. Puede eliminarse o refactorizarse.
+  generateMessagePrompt(
+    memoryContext = "",
+    faqInfo = "",
+    productosString = "",
+    carrito = "",
+    userMessage = "",
+    availableFunctions: any[] = []
+  ): string {
+    return this.generateAnalysisPrompt(
+      "Asistente",
+      "Asistente de chat",
+      availableFunctions,
+      userMessage
+    );
+  }
+
+  // Formatea la descripción de las funciones disponibles
   private formatFunctionsForPrompt(functions: any[]): string {
     if (!functions || functions.length === 0) {
-      return "- Sin funciones personalizadas";
+      return "- No hay funciones personalizadas disponibles.";
     }
 
     return functions
       .map((func) => {
         const params =
           func.parameters?.map((p: any) => p.name).join(", ") || "";
-        return `- ${func.description} → [${func.name.toUpperCase()}:${params}]`;
+        return `- **${func.description}**\n  → Usa: [${func.name.toUpperCase()}:${params}]`;
       })
-      .join("\n");
+      .join("\n\n");
   }
 }

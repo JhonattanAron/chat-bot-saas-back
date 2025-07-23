@@ -121,13 +121,21 @@ export class UsersController {
       };
     }
   }
-
   @Get("functions")
   async getFunctions(
     @Query("user_id") user_id: string,
     @Query("assistant_id") assistant_id: string
   ) {
     try {
+      // Validar parámetros requeridos
+      if (!user_id || !assistant_id) {
+        return {
+          success: false,
+          error:
+            "Missing required parameters: user_id and assistant_id are required",
+        };
+      }
+
       const assistant =
         await this.usersService.getAssistantChatByChatIdAndUserIdAndFaqs(
           assistant_id,
@@ -141,20 +149,34 @@ export class UsersController {
         };
       }
 
+      // Formatear las funciones en el formato esperado
+      const formattedFunctions =
+        assistant.funciones?.map((func: any) => ({
+          id: func._id?.toString(),
+          name: func.name,
+          description: func.description,
+          type: func.type,
+          api: func.api
+            ? {
+                url: func.api.url,
+                method: func.api.method,
+                headers: func.api.headers || [],
+                parameters: func.api.parameters || [],
+                auth: func.api.auth,
+              }
+            : undefined,
+          code: func.code,
+          credentials: func.credentials || [],
+          hasCode: !!func.code,
+          hasApi: !!func.api,
+        })) || [];
+
       return {
         success: true,
         assistant_id,
         assistant_name: assistant.name,
-        functions:
-          assistant.funciones?.map((func: any) => ({
-            id: func._id?.toString(),
-            name: func.name,
-            description: func.description,
-            type: func.type,
-            parameters: func.api?.parameters || [],
-            hasCode: !!func.code,
-            hasApi: !!func.api,
-          })) || [],
+        total_functions: formattedFunctions.length,
+        functions: formattedFunctions,
       };
     } catch (error) {
       console.error("Error getting functions:", error);
