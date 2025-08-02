@@ -36,22 +36,27 @@ export class ProductsController {
       tags?: string[];
       available?: boolean;
       stock?: number;
+      assistant_id: string;
     }
   ) {
     const product = {
       ...body,
       name:
         `{${body.name}}{${body.price}}{${body.description}}` +
-        (body.stock !== undefined ? `${body.stock}` : ""),
+        "{stock: " +
+        (body.stock !== undefined ? `${body.stock}}` : ""),
       tags: body.tags ?? [],
       available: body.available ?? true,
     };
-    return this.service.create(product);
+    return this.service.create(product, body.user_id, body.assistant_id);
   }
 
   @Get()
-  async findAll(@Query("user_id") user_id: string) {
-    return this.service.findAll(user_id);
+  async findAll(
+    @Query("user_id") user_id: string,
+    @Query("assistant_id") assistant_id: string
+  ) {
+    return this.service.findAll(user_id, assistant_id);
   }
 
   @Get(":id")

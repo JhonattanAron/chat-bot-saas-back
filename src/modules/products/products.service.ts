@@ -58,16 +58,25 @@ export class ProductsService {
     return this.model.insertMany(docs);
   }
 
-  async create(product: CreateProductDto) {
+  async create(
+    product: CreateProductDto,
+    user_id: string,
+    assistant_id: string
+  ) {
     const embedding = await getEmbedding(
       product.name + " " + (product.tags ?? []).join(" ")
     );
-    const doc = new this.model({ ...product, embedding });
+    const doc = new this.model({
+      ...product,
+      embedding,
+      user_id,
+      assistant_id,
+    });
     return doc.save();
   }
 
-  async findAll(user_id: string) {
-    return this.model.find({ user_id }).lean();
+  async findAll(user_id: string, assistant_id: string) {
+    return this.model.find({ user_id, assistant_id }).lean();
   }
 
   async findOne(id: string) {

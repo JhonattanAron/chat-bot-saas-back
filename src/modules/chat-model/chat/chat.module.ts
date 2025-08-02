@@ -40,5 +40,6 @@ import { CustomFunctionService } from "../services/custom-function.service";
     CustomFunctionService,
   ],
   controllers: [ChatController],
+  exports: [ChatService],
 })
 export class ChatModule {}

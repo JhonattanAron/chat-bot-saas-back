@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import type { Document } from "mongoose";
+import { Document } from "mongoose";
 import { FunctionItem, FunctionItemSchema } from "./functions-schema";
 
 export type AssistantChatDocument = AssistantChat & Document;

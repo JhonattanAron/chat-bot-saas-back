@@ -9,6 +9,9 @@ export class Product {
   user_id: string;
 
   @Prop({ required: true })
+  assistant_id: string;
+
+  @Prop({ required: true })
   name: string;
 
   @Prop({ required: true })
