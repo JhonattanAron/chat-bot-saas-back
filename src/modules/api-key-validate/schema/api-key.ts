@@ -15,9 +15,14 @@ export class ApiKey {
   @Prop({ required: true })
   name: string; // A human-readable name for the API key
 
-  // Mongoose automatically adds an _id field, which can serve as the unique identifier.
-  // If you need a separate 'id' field that's not _id, you can add it here.
-  // For simplicity, we'll use _id as the primary identifier.
+  @Prop({ default: true })
+  isActive: boolean; // Indicates if the API key is active
+
+  @Prop({ default: Date.now })
+  createdAt: Date; // Timestamp for when the API key was created
+
+  @Prop({ required: true })
+  user_id: MongooseSchema.Types.ObjectId; // The ID of the user who created the API key
 }
 
 export const ApiKeySchema = SchemaFactory.createForClass(ApiKey);

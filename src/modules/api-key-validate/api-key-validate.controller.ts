@@ -19,12 +19,15 @@ export class ApiKeyValidateController {
   constructor(private readonly apiKeyValidateService: ApiKeyValidateService) {}
 
   @Post("api-keys")
-  async createApiKey(@Body() body: { name: string }) {
-    if (!body.name) {
+  async createApiKey(@Body() body: { name: string; user_id: string }) {
+    if (!body.name || !body.user_id) {
       throw new BadRequestException("Name is required");
     }
 
-    const apiKey = await this.apiKeyValidateService.createApiKey(body.name);
+    const apiKey = await this.apiKeyValidateService.createApiKey(
+      body.name,
+      body.user_id
+    );
     return {
       message: "API Key created successfully",
       apiKey: {

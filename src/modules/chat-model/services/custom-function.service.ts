@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import type { Model } from "mongoose";
-import type { AssistantChatDocument } from "src/modules/users/schemas/assistant-chat.schema";
+import { Model } from "mongoose";
+import { AssistantChatDocument } from "src/modules/users/schemas/assistant-chat.schema";
 import { AssistantChat } from "src/modules/users/schemas/assistant-chat.schema";
 
 interface FunctionExecution {

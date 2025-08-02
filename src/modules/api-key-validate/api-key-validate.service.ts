@@ -16,9 +16,13 @@ export class ApiKeyValidateService {
     return crypto.randomBytes(32).toString("hex"); // Generates a 64-character hex string
   }
 
-  async createApiKey(name: string): Promise<ApiKey> {
+  async createApiKey(name: string, user_id: string): Promise<ApiKey> {
     const newKey = this.generateApiKey();
-    const createdApiKey = new this.apiKeyModel({ key: newKey, name });
+    const createdApiKey = new this.apiKeyModel({
+      key: newKey,
+      name,
+      user_id: user_id,
+    });
     return createdApiKey.save();
   }
 

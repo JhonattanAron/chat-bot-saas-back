@@ -11,8 +11,8 @@ import { UsersModule } from "./modules/users/users.module";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./modules/auth/auth.module";
 import { FaqsModule } from "./modules/faqs/faqs.module";
-import { ApiKeyValidateService } from "./modules/api-key-validate/api-key-validate.service";
 import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validate.module";
+import { AutomatedTasksModule } from "./modules/automated-tasks/automated-tasks.module";
 
 @Module({
   imports: [
@@ -28,6 +28,7 @@ import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validat
     AuthModule,
     FaqsModule,
     ApiKeyValidateModule,
+    AutomatedTasksModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],
