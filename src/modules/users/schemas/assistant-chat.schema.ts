@@ -33,6 +33,9 @@ export class AssistantChat {
   @Prop({ default: Date.now })
   createdAt: Date;
 
+  @Prop({ default: Date.now })
+  updatedAt: Date;
+
   @Prop({ default: 0 })
   all_messages: number;
 

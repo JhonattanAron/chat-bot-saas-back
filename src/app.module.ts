@@ -6,13 +6,17 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { ProductsModule } from "./modules/products/products.module";
 import { ChatModule } from "./modules/chat-model/chat/chat.module";
 import { ScheduleModule } from "@nestjs/schedule";
-import { UsersController } from "./modules/users/users.controller";
+
 import { UsersModule } from "./modules/users/users.module";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./modules/auth/auth.module";
 import { FaqsModule } from "./modules/faqs/faqs.module";
 import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validate.module";
 import { AutomatedTasksModule } from "./modules/automated-tasks/automated-tasks.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { TelegramChatModule } from "./modules/telegram-chat/telegram-chat.module";
+import { PlansModule } from "./modules/plans/plans.module";
+import { WhatsappModule } from "./modules/whatsapp-chat/whatsapp.module";
 
 @Module({
   imports: [
@@ -29,6 +33,10 @@ import { AutomatedTasksModule } from "./modules/automated-tasks/automated-tasks.
     FaqsModule,
     ApiKeyValidateModule,
     AutomatedTasksModule,
+    DashboardModule,
+    TelegramChatModule,
+    PlansModule,
+    WhatsappModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

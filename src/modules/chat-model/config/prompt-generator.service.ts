@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common"
 
 @Injectable()
 export class PromptGeneratorService {
@@ -7,10 +7,9 @@ export class PromptGeneratorService {
     contextName: string,
     contextDescription: string,
     availableFunctions: any[] = [],
-    userPrompt: string
+    userPrompt: string,
   ): string {
-    const functionsDescription =
-      this.formatFunctionsForPrompt(availableFunctions);
+    const functionsDescription = this.formatFunctionsForPrompt(availableFunctions)
 
     const systemPrompt = `
 Eres un asistente inteligente. Tu tarea es analizar la siguiente pregunta del usuario y determinar la INTENCIÓN principal.
@@ -58,8 +57,8 @@ CLAVE:
 PREGUNTA DEL USUARIO: "${userPrompt}"
 
 RESPUESTA (SOLO EL FORMATO REQUERIDO):
-`;
-    return systemPrompt;
+`
+    return systemPrompt
   }
 
   // Prompt para generar la respuesta natural final al usuario
@@ -69,43 +68,37 @@ RESPUESTA (SOLO EL FORMATO REQUERIDO):
     memoryContext: string,
     currentUserMessage: string,
     availableInfo: {
-      faqInfo?: string;
-      productosString?: string;
-      carrito?: string;
-      functionResults?: any[];
-    }
+      faqInfo?: string
+      productosString?: string
+      carrito?: string
+      functionResults?: any[]
+    },
   ): string {
-    const {
-      faqInfo,
-      productosString,
-      carrito,
-      functionResults = [],
-    } = availableInfo;
+    const { faqInfo, productosString, carrito, functionResults = [] } = availableInfo
 
     const functionResultsText = functionResults
       .map((result) => {
         if (result.success) {
-          return `✅ Función '${result.executedFunction}' ejecutada con éxito. Resultado: ${JSON.stringify(result.result)}`;
+          return `✅ Función '${result.executedFunction}' ejecutada con éxito. Resultado: ${JSON.stringify(result.result)}`
         } else {
-          return `❌ Función '${result.executedFunction}' falló. Error: ${result.error}`;
+          return `❌ Función '${result.executedFunction}' falló. Error: ${result.error}`
         }
       })
-      .join("\n");
+      .join("\n")
 
-    let productResponseInstruction = "";
-    const noProductsFound =
-      productosString === "No se encontraron productos con ese término.";
+    let productResponseInstruction = ""
+    const noProductsFound = productosString === "No se encontraron productos con ese término."
     const generalProductInquiryWithoutSearch =
       !productosString &&
       currentUserMessage.toLowerCase().includes("productos") &&
-      !functionResults.some((f) => f.executedFunction.includes("SEARCH"));
+      !functionResults.some((f) => f.executedFunction.includes("SEARCH"))
 
     if (noProductsFound || generalProductInquiryWithoutSearch) {
       productResponseInstruction = `
 - Si la búsqueda de productos no arrojó resultados o el usuario preguntó por productos en general sin especificar, NO digas 'no tengo información' o 'no hay productos'. En su lugar, como ${assistantName}, pregunta al usuario qué tipo de producto específico está buscando o qué características le interesan para poder realizar una búsqueda más precisa.
 - Ejemplo: "No encontré productos con esa descripción. Como tu asistente de compras, puedo ayudarte a buscar algo específico. ¿Qué tipo de producto te gustaría encontrar o qué características buscas?"
 - Ejemplo para pregunta general: "Claro, como tu asistente de compras, puedo ayudarte a encontrar lo que necesitas. ¿Qué tipo de producto te gustaría encontrar o qué características buscas?"
-`;
+`
     }
 
     return `
@@ -127,7 +120,7 @@ ${productResponseInstruction}
 - Termina tu respuesta con un tag [IMPORTANT_INFO:resumen_claro_de_la_respuesta_o_acción_principal]. Este resumen es para el sistema, no para el usuario.
 
 RESPUESTA AL USUARIO:
-`;
+`
   }
 
   // Este método solo llama a generateAnalysisPrompt. Puede eliminarse o refactorizarse.
@@ -137,28 +130,33 @@ RESPUESTA AL USUARIO:
     productosString = "",
     carrito = "",
     userMessage = "",
-    availableFunctions: any[] = []
+    availableFunctions: any[] = [],
   ): string {
-    return this.generateAnalysisPrompt(
-      "Asistente",
-      "Asistente de chat",
-      availableFunctions,
-      userMessage
-    );
+    return this.generateAnalysisPrompt("Asistente", "Asistente de chat", availableFunctions, userMessage)
   }
 
   // Formatea la descripción de las funciones disponibles
   private formatFunctionsForPrompt(functions: any[]): string {
     if (!functions || functions.length === 0) {
-      return "- No hay funciones personalizadas disponibles.";
+      return "- No hay funciones personalizadas disponibles."
     }
 
     return functions
       .map((func) => {
-        const params =
-          func.parameters?.map((p: any) => p.name).join(", ") || "";
-        return `- **${func.description}**\n  → Usa: [${func.name.toUpperCase()}:${params}]`;
+        let parametersList = ""
+
+        if (func.parameters && Array.isArray(func.parameters) && func.parameters.length > 0) {
+          // Para funciones API, los parámetros tienen estructura {name, type, required}
+          parametersList = func.parameters.map((p: any) => p.name || p).join(", ")
+        } else if (func.type === "custom") {
+          // Para funciones custom sin parámetros definidos, mostrar placeholder genérico
+          parametersList = "parámetros_si_necesarios"
+        }
+
+        const functionDescription = func.description || `Función ${func.name}`
+
+        return `- **${functionDescription}**\n  → Usa: [${func.name.toUpperCase()}${parametersList ? ":" + parametersList : ""}]`
       })
-      .join("\n\n");
+      .join("\n\n")
   }
 }

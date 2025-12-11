@@ -55,10 +55,13 @@ export class AuthController {
   }
 
   @Post("google-login")
-  async googleLogin(
-    @Body()
-    body: User
-  ) {
-    return this.authService.handleGoogleLogin(body);
+  async googleLogin(@Body() userData: User) {
+    try {
+      const result = await this.authService.handleGoogleLogin(userData);
+      return result;
+    } catch (error) {
+      console.error("Error en /auth/google-login:", error);
+      throw new console.error("Error interno");
+    }
   }
 }
