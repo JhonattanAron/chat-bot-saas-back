@@ -47,6 +47,18 @@ export class ChatController {
       };
     }
   }
+  @Post("voice")
+  async voice(
+    @Body() body: { chatId: string; assistantId: string; audio: string }
+  ) {
+    const { chatId, assistantId, audio } = body;
+
+    if (!chatId || !assistantId || !audio) {
+      throw new Error("chatId, assistantId y audio son obligatorios");
+    }
+
+    return this.chatService.voiceChat(chatId, assistantId, audio);
+  }
 
   @Post("message")
   async sendMessage(

@@ -439,4 +439,38 @@ export class ChatService {
       ? `CONVERSACIÓN PREVIA: ${memoryParts.join(" || ")}`
       : "";
   }
+  async voiceChat(
+    chatId: string,
+    assistantId: string,
+    audioBase64: string
+  ): Promise<{ audio: string }> {
+    // 1️⃣ Transcribir audio a texto usando tu PredictionService (Whisper)
+    const asrPrompt = `Transcribe este audio a texto: ${audioBase64}`;
+    const asrPrediction = await this.predictionService.predict(asrPrompt);
+    const userText = asrPrediction.output || "";
+
+    // 2️⃣ Reutilizar addMessage para procesar la conversación
+    const chatAfterMessage = await this.addMessage(
+      chatId,
+      assistantId,
+      "user",
+      userText
+    );
+
+    if (!chatAfterMessage) {
+      throw new Error(`Chat with chatId ${chatId} not found`);
+    }
+
+    // 3️⃣ Obtener último mensaje del asistente
+    const lastMessage =
+      chatAfterMessage.messages[chatAfterMessage.messages.length - 1];
+    const botText = lastMessage.content;
+
+    // 4️⃣ Convertir respuesta a audio usando PredictionService (TTS)
+    const ttsPrompt = `Convierte este texto a audio en formato base64: ${botText}`;
+    const ttsPrediction = await this.predictionService.predict(ttsPrompt);
+    const audioResponseBase64 = ttsPrediction.output || "";
+
+    return { audio: audioResponseBase64 };
+  }
 }

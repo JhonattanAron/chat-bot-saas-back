@@ -17,6 +17,8 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { TelegramChatModule } from "./modules/telegram-chat/telegram-chat.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { WhatsappModule } from "./modules/whatsapp-chat/whatsapp.module";
+import { BatchesModule } from "./modules/batches/batches.module";
+import { SystemModule } from "./modules/system/system.module";
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { WhatsappModule } from "./modules/whatsapp-chat/whatsapp.module";
     TelegramChatModule,
     PlansModule,
     WhatsappModule,
+    BatchesModule,
+    SystemModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],
