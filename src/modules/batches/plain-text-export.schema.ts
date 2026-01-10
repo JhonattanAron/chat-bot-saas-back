@@ -14,6 +14,18 @@ export class PlainTextExport {
 
   @Prop({ required: true })
   content: string;
+
+  @Prop({ required: false, default: false })
+  analized: boolean;
+
+  @Prop({ required: false, default: "" })
+  analized_data: string;
+
+  @Prop({ default: Date.now })
+  createdAt: Date;
+
+  @Prop({ default: Date.now })
+  updatedAt: Date;
 }
 
 export const PlainTextExportSchema =

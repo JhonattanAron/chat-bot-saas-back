@@ -6,6 +6,7 @@ import {
   Body,
   HttpException,
   HttpStatus,
+  Patch,
 } from "@nestjs/common";
 import { BatchesService } from "./batches.service";
 
@@ -73,5 +74,17 @@ export class BatchesController {
   @Post(":id/generate")
   async generate(@Param("id") batchId: string) {
     return this.batchesService.generateBatch(batchId);
+  }
+  @Patch(":id/analized")
+  async updateAnalized(
+    @Param("id") id: string,
+    @Body("analized") analized: boolean,
+    @Body("analized_data") analized_data: string
+  ) {
+    return this.batchesService.updateAnalizedData(id, analized, analized_data);
+  }
+  @Get(":id/json-analized")
+  async getAnalizedText(@Param("id") id: string) {
+    return this.batchesService.JsonAnalized(id);
   }
 }

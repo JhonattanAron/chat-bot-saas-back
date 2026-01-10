@@ -173,8 +173,6 @@ export class DashboardService {
     await this.syncCurrentStats(userId);
     const stats = await this.dashboardStatsModel.findOne({ user_id: userId });
 
-    console.log(stats);
-
     const maxTokens = 10000;
     const inputTokens = stats?.total_input_tokens || 0;
     const outputTokens = stats?.total_output_tokens || 0;

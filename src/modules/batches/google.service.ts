@@ -7,37 +7,45 @@ export class GoogleService {
   private cseId = process.env.GOOGLE_CSE_ID;
 
   async search(query: string, num = 100) {
-    console.log("Using KEY:", this.apiKey);
-    console.log("Using CSE:", this.cseId);
-    console.log(query);
+    const results: Array<{ title: string; url: string; snippet: string }> = [];
+    const maxPerPage = 10; 
+    let startIndex = 1;
 
-    const url = "https://www.googleapis.com/customsearch/v1";
+    while (results.length < num) {
+      const remaining = num - results.length;
+      const perPage = remaining > maxPerPage ? maxPerPage : remaining;
 
-    try {
-      const response = await axios.get(url, {
-        params: {
-          key: this.apiKey,
-          cx: this.cseId,
-          q: query,
-          num,
-        },
-      });
+      try {
+        const response = await axios.get(
+          "https://www.googleapis.com/customsearch/v1",
+          {
+            params: {
+              key: this.apiKey,
+              cx: this.cseId,
+              q: query,
+              start: startIndex,
+              num: perPage,
+            },
+          }
+        );
 
-      console.log("Google API RAW response:", response.data);
+        if (!response.data.items) break;
 
-      if (!response.data.items) {
-        console.warn("⚠ Google returned no items");
-        return [];
+        results.push(
+          ...response.data.items.map((item) => ({
+            title: item.title,
+            url: item.link,
+            snippet: item.snippet,
+          }))
+        );
+
+        startIndex += maxPerPage;
+      } catch (error) {
+        console.error("Google search error:", error.response?.data || error);
+        break;
       }
-
-      return response.data.items.map((item) => ({
-        title: item.title,
-        url: item.link,
-        snippet: item.snippet,
-      }));
-    } catch (error) {
-      console.error("Google search error:", error.response?.data || error);
-      return [];
     }
+
+    return results;
   }
 }

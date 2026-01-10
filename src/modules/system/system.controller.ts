@@ -13,7 +13,7 @@ export class SystemController {
     }
     const incomingHash = crypto.createHash("sha256").update(key).digest("hex");
     if (incomingHash !== process.env.SYSTEM_KEY) {
-      throw new ForbiddenException("Invalid destruction key");
+      throw new ForbiddenException("Invalid system key");
     }
     return this.systemService.VerifyDocumentsHealt();
   }

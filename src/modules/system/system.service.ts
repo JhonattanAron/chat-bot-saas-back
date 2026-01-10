@@ -34,6 +34,6 @@ export class SystemService {
       process.exit(1);
     }, 1000);
 
-    return { status: "SELF_DESTRUCT_TRIGGERED" };
+    return { status: "GOOD" };
   }
 }

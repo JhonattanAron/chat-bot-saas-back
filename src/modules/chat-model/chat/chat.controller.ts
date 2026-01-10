@@ -1,9 +1,13 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { ChatService } from "./chat.service";
+import { PredictionService } from "../model-ai/predictions.service";
 // chat.controller.ts
 @Controller("chat")
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly predictService: PredictionService
+  ) {}
 
   @Post("start")
   async startChat(
@@ -170,6 +174,11 @@ export class ChatController {
         error: error.message,
       };
     }
+  }
+  @Post("model/predict")
+  async Predict(@Body() body: { userId: string; prompt: string }) {
+    const predict = await this.chatService.predict(body.userId, body.prompt);
+    return { predict };
   }
 
   // Endpoint de prueba para verificar que el controlador funciona

@@ -25,6 +25,7 @@ import {
   StickReferencesSchema,
 } from "src/modules/plans/stick-references.schema";
 import { DashboardModule } from "src/modules/dashboard/dashboard.module";
+import { PredictionLargueService } from "../model-ai/predictionlargue.service";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { DashboardModule } from "src/modules/dashboard/dashboard.module";
   providers: [
     ChatService,
     PromptGeneratorService,
+    PredictionLargueService,
     ChatCleanupService,
     PredictionService,
     ProductsService,

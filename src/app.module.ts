@@ -12,13 +12,12 @@ import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./modules/auth/auth.module";
 import { FaqsModule } from "./modules/faqs/faqs.module";
 import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validate.module";
-import { AutomatedTasksModule } from "./modules/automated-tasks/automated-tasks.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { TelegramChatModule } from "./modules/telegram-chat/telegram-chat.module";
 import { PlansModule } from "./modules/plans/plans.module";
-import { WhatsappModule } from "./modules/whatsapp-chat/whatsapp.module";
 import { BatchesModule } from "./modules/batches/batches.module";
 import { SystemModule } from "./modules/system/system.module";
+import { MailModule } from "./modules/ai-emails/mail.module";
 
 @Module({
   imports: [
@@ -34,11 +33,10 @@ import { SystemModule } from "./modules/system/system.module";
     AuthModule,
     FaqsModule,
     ApiKeyValidateModule,
-    AutomatedTasksModule,
     DashboardModule,
     TelegramChatModule,
     PlansModule,
-    WhatsappModule,
+    MailModule,
     BatchesModule,
     SystemModule,
   ],

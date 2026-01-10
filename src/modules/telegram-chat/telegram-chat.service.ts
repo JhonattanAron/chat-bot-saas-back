@@ -85,6 +85,89 @@ export class TelegramChatService {
       throw error;
     }
   }
+  private async runTelegramAgent(
+    userId: string,
+    assistantId: string,
+    userMessage: string,
+    memoryContext: string
+  ) {
+    const context = await this.userService.getAssistantById(
+      assistantId,
+      userId
+    );
+    if (!context) throw new Error("Assistant not found");
+
+    const availableFunctions =
+      await this.customFunctionService.getFunctionsList(userId, assistantId);
+
+    // 🧠 PROMPT ÚNICO
+    const firstPrompt = this.promptGen.generateUnifiedPrompt(
+      context.name,
+      context.description,
+      memoryContext,
+      userMessage,
+      availableFunctions
+    );
+
+    const firstPrediction = await this.predictionService.predict(firstPrompt);
+
+    let input_tokens = firstPrediction.input_tokens || 0;
+    let output_tokens = firstPrediction.output_tokens || 0;
+
+    const functionCall = this.customFunctionService.parseFunctionCall(
+      firstPrediction.output
+    );
+
+    // ✅ No función → respuesta directa
+    if (!functionCall) {
+      return {
+        response: firstPrediction.output,
+        input_tokens,
+        output_tokens,
+      };
+    }
+
+    // 🚀 Ejecutar función
+    const functionResult = !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(
+      functionCall.functionName
+    )
+      ? await this.customFunctionService.executeFunction(
+          functionCall.functionName,
+          functionCall.parameters,
+          userId,
+          assistantId
+        )
+      : null;
+
+    // 🧠 SEGUNDA PASADA
+    const secondPrompt = this.promptGen.generateUnifiedPrompt(
+      context.name,
+      context.description,
+      memoryContext,
+      userMessage,
+      availableFunctions,
+      functionResult ? [functionResult] : []
+    );
+
+    const secondPrediction = await this.predictionService.predict(secondPrompt);
+
+    input_tokens += secondPrediction.input_tokens || 0;
+    output_tokens += secondPrediction.output_tokens || 0;
+
+    return {
+      response: secondPrediction.output,
+      input_tokens,
+      output_tokens,
+      funcionesEjecutadas: functionResult
+        ? [
+            `[${functionCall.functionName}:${functionCall.parameters.join(
+              ", "
+            )}]`,
+          ]
+        : [],
+    };
+  }
+
   private async setTelegramWebhook(botToken: string) {
     const webhookUrl = `${process.env.PUBLIC_URL}/telegram-chat/webhook/${botToken}`;
 
@@ -166,17 +249,12 @@ export class TelegramChatService {
     firstName?: string,
     lastName?: string,
     messageId?: number
-  ): Promise<TelegramChatDocument | null> {
-    let input_tokens = 0;
-    let output_tokens = 0;
-
-    // Verificar si ya existe un chat para este telegramChatId
+  ) {
     const existingChat = await this.telegramChatModel.findOne({
       telegramChatId,
     });
 
     if (existingChat) {
-      // Si existe, agregar el mensaje y generar respuesta
       return this.addTelegramMessage(
         (existingChat._id as Types.ObjectId).toString(),
         assistantId,
@@ -186,92 +264,17 @@ export class TelegramChatService {
       );
     }
 
-    // Obtener el contexto del asistente específico
-    const context = await this.userService.getAssistantById(
-      assistantId,
-      userId
-    );
-
-    if (!context) {
-      throw new Error(
-        `No assistant found with id ${assistantId} for userId ${userId}`
-      );
-    }
-
-    // Obtener funciones disponibles del asistente específico
-    const availableFunctions =
-      await this.customFunctionService.getFunctionsList(userId, assistantId);
-
-    // Paso 1: Analizar intención y ejecutar funciones (PRIMERA PREDICCIÓN)
-    const analysisPrompt = this.promptGen.generateAnalysisPrompt(
-      context.name,
-      context.description,
-      availableFunctions,
-      message
-    );
-
-    const analysisPrediction =
-      await this.predictionService.predict(analysisPrompt);
-    input_tokens += analysisPrediction.input_tokens || 0;
-    output_tokens += analysisPrediction.output_tokens || 0;
-
-    // Procesar funciones identificadas
-    const processedResult = await this.processModelResponse(
-      analysisPrediction.output,
+    const result = await this.runTelegramAgent(
       userId,
-      assistantId
-    );
-
-    // Paso 2: Generar respuesta final con información recopilada (SEGUNDA PREDICCIÓN)
-    const finalPrompt = this.promptGen.generateContextualPrompt(
-      context.name,
-      context.description,
-      "", // No memory context for the very first message
+      assistantId,
       message,
-      {
-        faqInfo: processedResult.faqInfo,
-        productosString: processedResult.productosString,
-        carrito: "",
-        functionResults: processedResult.functionResults,
-      }
+      ""
     );
 
-    const finalPrediction = await this.predictionService.predict(finalPrompt);
-    input_tokens += finalPrediction.input_tokens || 0;
-    output_tokens += finalPrediction.output_tokens || 0;
+    const cleanedResponse = this.cleanModelResponse(result.response);
+    const importantInfo = this.extractImportantInfo(result.response);
 
-    // Procesar respuesta final
-    const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
-    const finalImportantInfo = this.extractImportantInfo(
-      finalPrediction.output
-    );
-
-    // Construir important_info completo
-    const completeImportantInfo = this.buildCompleteImportantInfo(
-      finalImportantInfo,
-      processedResult.funcionesEjecutadas
-    );
-
-    // Guardar mensajes
-    const messages = [
-      {
-        role: "user" as const,
-        content: message,
-        createdAt: new Date(),
-        important_info: "",
-        messageId: messageId,
-        messageType: "text",
-      },
-      {
-        role: "assistant" as const,
-        content: cleanedResponse,
-        createdAt: new Date(),
-        important_info: completeImportantInfo,
-        messageType: "text",
-      },
-    ];
-
-    const telegramChat = new this.telegramChatModel({
+    const chat = new this.telegramChatModel({
       userId,
       assistantId,
       telegramChatId,
@@ -279,17 +282,31 @@ export class TelegramChatService {
       username: username || "",
       firstName: firstName || "",
       lastName: lastName || "",
-      messages,
+      messages: [
+        {
+          role: "user",
+          content: message,
+          createdAt: new Date(),
+          messageId,
+          messageType: "text",
+        },
+        {
+          role: "assistant",
+          content: cleanedResponse,
+          createdAt: new Date(),
+          important_info: this.buildCompleteImportantInfo(
+            importantInfo,
+            result.funcionesEjecutadas || []
+          ),
+          messageType: "text",
+        },
+      ],
+      input_tokens: result.input_tokens,
+      output_tokens: result.output_tokens,
       lastActivityAt: new Date(),
-      input_tokens,
-      output_tokens,
-      telegramMetadata: {
-        chatType: "private",
-        isBot: false,
-      },
     });
 
-    return telegramChat.save();
+    return chat.save();
   }
 
   async addTelegramMessage(
@@ -297,131 +314,64 @@ export class TelegramChatService {
     assistantId: string,
     role: "user" | "assistant",
     content: string,
-    messageId?: number,
-    messageType = "text",
-    mediaUrl?: string,
-    replyToMessageId?: number
+    messageId?: number
   ) {
-    const chat = await this.telegramChatModel.findOne({ _id: chatId });
-    if (!chat) {
-      throw new Error("Chat no encontrado");
-    }
-    if (!chat) throw new Error(`Telegram chat with chatId ${chatId} not found`);
+    const chat = await this.telegramChatModel.findById(chatId);
+    if (!chat) throw new Error("Chat not found");
 
-    if (role === "user") {
-      // Guardar mensaje del usuario
-      await this.telegramChatModel.findOneAndUpdate(
-        { _id: chatId },
-        {
-          $push: {
-            messages: {
-              role,
-              content,
-              createdAt: new Date(),
-              important_info: "",
-              messageId,
-              messageType,
-              mediaUrl,
-              replyToMessageId,
-            },
+    if (role !== "user") return chat;
+
+    await this.telegramChatModel.updateOne(
+      { _id: chatId },
+      {
+        $push: {
+          messages: {
+            role: "user",
+            content,
+            createdAt: new Date(),
+            messageId,
+            messageType: "text",
           },
-          $set: { lastActivityAt: new Date() },
-        }
-      );
-
-      // Obtener contexto del asistente específico
-      const context = await this.userService.getAssistantById(
-        assistantId,
-        chat.userId
-      );
-      if (!context) {
-        throw new Error(
-          `Assistant ${assistantId} not found for user ${chat.userId}`
-        );
+        },
+        $set: { lastActivityAt: new Date() },
       }
+    );
 
-      const availableFunctions =
-        await this.customFunctionService.getFunctionsList(
-          chat.userId,
-          assistantId
-        );
+    const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
 
-      // Construir contexto de memoria mejorado
-      const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
+    const result = await this.runTelegramAgent(
+      chat.userId,
+      assistantId,
+      content,
+      memoryContext
+    );
 
-      // Paso 1: Analizar intención del nuevo mensaje (PRIMERA PREDICCIÓN)
-      const analysisPrompt = this.promptGen.generateAnalysisPrompt(
-        context.name,
-        context.description,
-        availableFunctions,
-        content
-      );
+    const cleanedResponse = this.cleanModelResponse(result.response);
+    const importantInfo = this.extractImportantInfo(result.response);
 
-      const analysisPrediction =
-        await this.predictionService.predict(analysisPrompt);
-      let input_tokens = analysisPrediction.input_tokens || 0;
-      let output_tokens = analysisPrediction.output_tokens || 0;
-
-      // Procesar funciones identificadas
-      const processedResult = await this.processModelResponse(
-        analysisPrediction.output,
-        chat.userId,
-        assistantId
-      );
-
-      // Paso 2: Generar respuesta final (SEGUNDA PREDICCIÓN)
-      const finalPrompt = this.promptGen.generateContextualPrompt(
-        context.name,
-        context.description,
-        memoryContext,
-        content,
-        {
-          faqInfo: processedResult.faqInfo,
-          productosString: processedResult.productosString,
-          carrito: "",
-          functionResults: processedResult.functionResults,
-        }
-      );
-
-      const finalPrediction = await this.predictionService.predict(finalPrompt);
-      input_tokens += finalPrediction.input_tokens || 0;
-      output_tokens += finalPrediction.output_tokens || 0;
-
-      // Procesar respuesta final
-      const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
-      const newImportantInfo = this.extractImportantInfo(
-        finalPrediction.output
-      );
-
-      // Construir important_info completo
-      const completeImportantInfo = this.buildCompleteImportantInfo(
-        newImportantInfo,
-        processedResult.funcionesEjecutadas
-      );
-
-      // Guardar respuesta del asistente
-      await this.telegramChatModel.findOneAndUpdate(
-        { _id: chatId },
-        {
-          $push: {
-            messages: {
-              role: "assistant",
-              content: cleanedResponse,
-              createdAt: new Date(),
-              important_info: completeImportantInfo,
-              messageType: "text",
-            },
+    await this.telegramChatModel.updateOne(
+      { _id: chatId },
+      {
+        $push: {
+          messages: {
+            role: "assistant",
+            content: cleanedResponse,
+            createdAt: new Date(),
+            important_info: this.buildCompleteImportantInfo(
+              importantInfo,
+              result.funcionesEjecutadas || []
+            ),
+            messageType: "text",
           },
-          $set: { lastActivityAt: new Date() },
-          $inc: {
-            input_tokens: input_tokens,
-            output_tokens: output_tokens,
-          },
-        }
-      );
-    }
+        },
+        $inc: {
+          input_tokens: result.input_tokens,
+          output_tokens: result.output_tokens,
+        },
+      }
+    );
 
-    return this.telegramChatModel.findOne({ _id: chatId });
+    return this.telegramChatModel.findById(chatId);
   }
 
   async getTelegramChat(chatId: string) {

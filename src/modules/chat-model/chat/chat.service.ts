@@ -9,6 +9,7 @@ import { CustomFunctionService } from "../services/custom-function.service";
 
 import { InjectModel } from "@nestjs/mongoose";
 import { Injectable } from "@nestjs/common";
+import { PredictionLargueService } from "../model-ai/predictionlargue.service";
 
 @Injectable()
 export class ChatService {
@@ -17,106 +18,171 @@ export class ChatService {
     private readonly chatModel: Model<ChatDocument>,
     private readonly promptGen: PromptGeneratorService,
     private readonly predictionService: PredictionService,
+    private readonly predictionLargeService: PredictionLargueService,
     private readonly productSearchService: ProductsService,
     private readonly userService: UsersService,
     private readonly faqsService: FaqsService,
     private readonly customFunctionService: CustomFunctionService
   ) {}
-
-  async createChat(
-    userId: string,
+  private async runAgentLoop(
     assistantId: string,
-    promt: string
-  ): Promise<ChatDocument> {
-    let input_tokens = 0;
-    let output_tokens = 0;
-
-    // Obtener el contexto del asistente específico
+    userId: string,
+    userMessage: string,
+    memoryContext: string
+  ) {
     const context = await this.userService.getAssistantById(
       assistantId,
       userId
     );
+    if (!context) throw new Error("Assistant not found");
 
-    if (!context) {
-      throw new Error(
-        `No assistant found with id ${assistantId} for userId ${userId}`
-      );
-    }
-
-    // Obtener funciones disponibles del asistente específico
     const availableFunctions =
       await this.customFunctionService.getFunctionsList(userId, assistantId);
 
-    availableFunctions.forEach((func) => {
-      console.log(`- ${func.name}: ${func.description}`);
-    });
-
-    // Paso 1: Analizar intención y ejecutar funciones (PRIMERA PREDICCIÓN)
-    const analysisPrompt = this.promptGen.generateAnalysisPrompt(
+    // 🧠 PRIMER PROMPT
+    const firstPrompt = this.promptGen.generateUnifiedPrompt(
       context.name,
       context.description,
-      availableFunctions,
-      promt
+      memoryContext,
+      userMessage,
+      availableFunctions
     );
 
-    const analysisPrediction =
-      await this.predictionService.predict(analysisPrompt);
-    input_tokens += analysisPrediction.input_tokens || 0;
-    output_tokens += analysisPrediction.output_tokens || 0;
+    const firstPrediction = await this.predictionService.predict(firstPrompt);
 
-    // Procesar funciones identificadas
-    const processedResult = await this.processModelResponse(
-      analysisPrediction.output,
+    let input_tokens = firstPrediction.input_tokens || 0;
+    let output_tokens = firstPrediction.output_tokens || 0;
+
+    const functionCall = this.customFunctionService.parseFunctionCall(
+      firstPrediction.output
+    );
+
+    // ✅ NO hay función → respuesta directa
+    if (!functionCall) {
+      return {
+        response: firstPrediction.output,
+        input_tokens,
+        output_tokens,
+      };
+    }
+
+    // 🚀 Ejecutar función
+    const functionResult = !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(
+      functionCall.functionName
+    )
+      ? await this.customFunctionService.executeFunction(
+          functionCall.functionName,
+          functionCall.parameters,
+          userId,
+          assistantId
+        )
+      : null;
+
+    // 🧠 SEGUNDO PROMPT (con resultados)
+    const secondPrompt = `
+Eres ${context.name}, un asistente que responde de forma clara y natural.
+
+El usuario preguntó:
+"${userMessage}"
+
+Ya se ejecutó la función ${functionCall.functionName} con éxito.
+
+RESULTADO DE LA FUNCIÓN:
+${JSON.stringify(functionResult?.result, null, 2)}
+
+INSTRUCCIONES OBLIGATORIAS:
+- Redacta una respuesta clara para el usuario
+- NO llames más funciones
+- NO repitas etiquetas técnicas
+- Resume lo importante
+- Finaliza SIEMPRE con:
+[IMPORTANT_INFO: resumen_claro_y_util]
+`;
+
+    const secondPrediction = await this.predictionService.predict(secondPrompt);
+
+    input_tokens += secondPrediction.input_tokens || 0;
+    output_tokens += secondPrediction.output_tokens || 0;
+
+    return {
+      response: secondPrediction.output,
+      input_tokens,
+      output_tokens,
+      funcionesEjecutadas: functionResult
+        ? [
+            `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`,
+          ]
+        : [],
+    };
+  }
+
+  async createChat(
+    userId: string,
+    assistantId: string,
+    prompt: string
+  ): Promise<ChatDocument> {
+    const result = await this.runAgentLoop(assistantId, userId, prompt, "");
+
+    const cleanedResponse = this.cleanModelResponse(result.response);
+    const importantInfo = this.extractImportantInfo(result.response);
+
+    const chat = new this.chatModel({
       userId,
-      assistantId
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+          createdAt: new Date(),
+          important_info: "",
+        },
+        {
+          role: "assistant",
+          content: cleanedResponse,
+          createdAt: new Date(),
+          important_info: this.buildCompleteImportantInfo(
+            importantInfo,
+            result.funcionesEjecutadas || []
+          ),
+        },
+      ],
+      lastActivityAt: new Date(),
+      input_tokens: result.input_tokens,
+      output_tokens: result.output_tokens,
+    });
+
+    return await chat.save();
+  }
+
+  async predict(userId: string, prompt: string): Promise<ChatDocument> {
+    let input_tokens = 0;
+    let output_tokens = 0;
+
+    // 1. Predicción directa (RAW)
+    const prediction = await this.predictionLargeService.predictLarge(
+      "",
+      prompt
     );
 
-    // Paso 2: Generar respuesta final con información recopilada (SEGUNDA PREDICCIÓN)
-    const finalPrompt = this.promptGen.generateContextualPrompt(
-      context.name, // Pass assistant name
-      context.description, // Pass assistant description
-      "", // No memory context for the very first message
-      promt,
-      {
-        faqInfo: processedResult.faqInfo,
-        productosString: processedResult.productosString,
-        carrito: "", // Not implemented yet
-        functionResults: processedResult.functionResults,
-      }
-    );
+    input_tokens = prediction.input_tokens || 0;
+    output_tokens = prediction.output_tokens || 0;
 
-    const finalPrediction = await this.predictionService.predict(finalPrompt);
-    input_tokens += finalPrediction.input_tokens || 0;
-    output_tokens += finalPrediction.output_tokens || 0;
-
-    // Procesar respuesta final
-    const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
-    const finalImportantInfo = this.extractImportantInfo(
-      finalPrediction.output
-    );
-
-    // Construir important_info completo
-    const completeImportantInfo = this.buildCompleteImportantInfo(
-      finalImportantInfo,
-      processedResult.funcionesEjecutadas
-    );
-
-    // Guardar mensajes
+    // 2. Mensajes estándar del chat
     const messages = [
       {
         role: "user" as const,
-        content: promt,
+        content: prompt,
         createdAt: new Date(),
-        important_info: "", // User messages don't have important_info
+        important_info: "",
       },
       {
         role: "assistant" as const,
-        content: cleanedResponse,
+        content: prediction.output,
         createdAt: new Date(),
-        important_info: completeImportantInfo,
+        important_info: "",
       },
     ];
 
+    // 3. Crear chat con TODAS las variables base
     const chat = new this.chatModel({
       userId,
       messages,
@@ -125,9 +191,47 @@ export class ChatService {
       output_tokens,
     });
 
-    const savedChat = await chat.save();
+    // 4. Guardar
+    return await chat.save();
+  }
 
-    return savedChat;
+  async singlePredict(userId: string, prompt: string): Promise<ChatDocument> {
+    let input_tokens = 0;
+    let output_tokens = 0;
+
+    // 1. Predicción directa (RAW)
+    const prediction = await this.predictionService.predict(prompt);
+
+    input_tokens = prediction.input_tokens || 0;
+    output_tokens = prediction.output_tokens || 0;
+
+    // 2. Mensajes estándar del chat
+    const messages = [
+      {
+        role: "user" as const,
+        content: prompt,
+        createdAt: new Date(),
+        important_info: "",
+      },
+      {
+        role: "assistant" as const,
+        content: prediction.output,
+        createdAt: new Date(),
+        important_info: "",
+      },
+    ];
+
+    // 3. Crear chat con TODAS las variables base
+    const chat = new this.chatModel({
+      userId,
+      messages,
+      lastActivityAt: new Date(),
+      input_tokens,
+      output_tokens,
+    });
+
+    // 4. Guardar
+    return await chat.save();
   }
 
   async addMessage(
@@ -136,118 +240,60 @@ export class ChatService {
     role: "user" | "assistant",
     content: string
   ) {
-    const chat = await this.chatModel.findOne({ _id: chatId });
-    if (!chat) throw new Error(`Chat with chatId ${chatId} not found`);
+    const chat = await this.chatModel.findById(chatId);
+    if (!chat) throw new Error("Chat not found");
 
-    if (role === "user") {
-      // Guardar mensaje del usuario
-      await this.chatModel.findOneAndUpdate(
-        { _id: chatId },
-        {
-          $push: {
-            messages: {
-              role,
-              content,
-              createdAt: new Date(),
-              important_info: "",
-            },
+    if (role !== "user") return chat;
+
+    await this.chatModel.updateOne(
+      { _id: chatId },
+      {
+        $push: {
+          messages: {
+            role: "user",
+            content,
+            createdAt: new Date(),
+            important_info: "",
           },
-          $set: { lastActivityAt: new Date() },
-        }
-      );
-
-      // Obtener contexto del asistente específico
-      const context = await this.userService.getAssistantById(
-        assistantId,
-        chat.userId
-      );
-      if (!context) {
-        throw new Error(
-          `Assistant ${assistantId} not found for user ${chat.userId}`
-        );
+        },
       }
+    );
 
-      const availableFunctions =
-        await this.customFunctionService.getFunctionsList(
-          chat.userId,
-          assistantId
-        );
+    const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
 
-      // Construir contexto de memoria mejorado
-      const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
+    const result = await this.runAgentLoop(
+      assistantId,
+      chat.userId,
+      content,
+      memoryContext
+    );
 
-      // Paso 1: Analizar intención del nuevo mensaje (PRIMERA PREDICCIÓN)
-      const analysisPrompt = this.promptGen.generateAnalysisPrompt(
-        context.name,
-        context.description,
-        availableFunctions,
-        content
-      );
+    const cleanedResponse = this.cleanModelResponse(result.response);
+    const importantInfo = this.extractImportantInfo(result.response);
 
-      const analysisPrediction =
-        await this.predictionService.predict(analysisPrompt);
-      let input_tokens = analysisPrediction.input_tokens || 0;
-      let output_tokens = analysisPrediction.output_tokens || 0;
-
-      // Procesar funciones identificadas
-      const processedResult = await this.processModelResponse(
-        analysisPrediction.output,
-        chat.userId,
-        assistantId
-      );
-
-      // Paso 2: Generar respuesta final (SEGUNDA PREDICCIÓN)
-      const finalPrompt = this.promptGen.generateContextualPrompt(
-        context.name, // Pass assistant name
-        context.description, // Pass assistant description
-        memoryContext,
-        content,
-        {
-          faqInfo: processedResult.faqInfo,
-          productosString: processedResult.productosString,
-          carrito: "", // Not implemented yet
-          functionResults: processedResult.functionResults,
-        }
-      );
-
-      const finalPrediction = await this.predictionService.predict(finalPrompt);
-      input_tokens += finalPrediction.input_tokens || 0;
-      output_tokens += finalPrediction.output_tokens || 0;
-
-      // Procesar respuesta final
-      const cleanedResponse = this.cleanModelResponse(finalPrediction.output);
-      const newImportantInfo = this.extractImportantInfo(
-        finalPrediction.output
-      );
-
-      // Construir important_info completo
-      const completeImportantInfo = this.buildCompleteImportantInfo(
-        newImportantInfo,
-        processedResult.funcionesEjecutadas
-      );
-
-      // Guardar respuesta del asistente
-      await this.chatModel.findOneAndUpdate(
-        { _id: chatId },
-        {
-          $push: {
-            messages: {
-              role: "assistant",
-              content: cleanedResponse,
-              createdAt: new Date(),
-              important_info: completeImportantInfo,
-            },
+    await this.chatModel.updateOne(
+      { _id: chatId },
+      {
+        $push: {
+          messages: {
+            role: "assistant",
+            content: cleanedResponse,
+            createdAt: new Date(),
+            important_info: this.buildCompleteImportantInfo(
+              importantInfo,
+              result.funcionesEjecutadas || []
+            ),
           },
-          $set: { lastActivityAt: new Date() },
-          $inc: {
-            input_tokens: input_tokens,
-            output_tokens: output_tokens,
-          },
-        }
-      );
-    }
+        },
+        $inc: {
+          input_tokens: result.input_tokens,
+          output_tokens: result.output_tokens,
+        },
+        $set: { lastActivityAt: new Date() },
+      }
+    );
 
-    return this.chatModel.findOne({ _id: chatId });
+    return this.chatModel.findById(chatId);
   }
 
   async getChat(chatId: string) {

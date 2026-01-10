@@ -69,7 +69,7 @@ export class BatchesService {
 
     try {
       // Buscar en Google
-      const results = await this.googleService.search(searchQuery, 10);
+      const results = await this.googleService.search(searchQuery, 100);
 
       if (!results || results.length === 0) {
         await this.batchModel.findByIdAndUpdate(batch._id, {
@@ -336,8 +336,35 @@ export class BatchesService {
   async getLeadsByBatchId(batchId: string) {
     return this.leadModel.find({ batch_id: batchId }).exec();
   }
+  async updateAnalizedData(
+    id: string,
+    analized: boolean,
+    analized_data: string
+  ): Promise<PlainTextExport> {
+    const updated = await this.plainTextExportModel.findByIdAndUpdate(
+      id,
+      { analized, analized_data, updatedAt: new Date() },
+      { new: true } // devuelve el documento actualizado
+    );
+
+    if (!updated) {
+      throw new NotFoundException(`PlainTextExport con id ${id} no encontrado`);
+    }
+
+    return updated;
+  }
 
   async findById(id: string): Promise<Batch | null> {
     return this.batchModel.findById(id).exec();
+  }
+
+  async JsonAnalized(id: string): Promise<PlainTextExport> {
+    const data = await this.plainTextExportModel.findById(id);
+
+    if (!data) {
+      throw new NotFoundException(`PlainTextExport con id ${id} no encontrado`);
+    }
+
+    return data;
   }
 }
