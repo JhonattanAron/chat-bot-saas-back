@@ -26,7 +26,8 @@ export class MailService {
     type: string;
     context: any;
     userId: string;
-    entityId?: string; // <- agregar aquí
+    entityId?: string;
+    batch: string; // <- agregar aquí
   }) {
     console.log(params.context);
 
@@ -68,8 +69,13 @@ export class MailService {
       userId: params.userId,
       entityId: params.context.entityId,
       status: error ? "error" : "sent",
+      batch: params.batch,
     });
 
     return { data, error };
+  }
+
+  async findCampaingByUserId(userId: string) {
+    return this.mailLogModel.find({ userId }).sort({ createdAt: -1 }).exec();
   }
 }

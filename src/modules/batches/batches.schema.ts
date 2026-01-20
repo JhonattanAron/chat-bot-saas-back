@@ -17,6 +17,9 @@ export class Batch extends Document {
 
   @Prop({ default: 0 })
   processed_urls: number;
+
+  @Prop({ default: false })
+  normalized_with_ai: boolean;
 }
 
 export const BatchSchema = SchemaFactory.createForClass(Batch);

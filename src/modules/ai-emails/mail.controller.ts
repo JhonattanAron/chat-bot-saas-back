@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { MailService } from "./mail.service";
 import { SendLeadsMailsDto } from "./dto/send-leads-mails.dto";
 
@@ -15,6 +15,7 @@ export class MailController {
       messageId?: string;
       error?: string;
       userId?: string;
+      batch: string | null;
     }> = [];
 
     for (const lead of dto.leads) {
@@ -33,7 +34,8 @@ export class MailController {
               nivel_interes: lead.nivel_interes,
             },
             entityId: lead.empresa,
-            userId: lead.userId, // <-- Aquí agregas el userId
+            userId: lead.userId,
+            batch: lead.batch, // ✅ pasar batch por lead
           });
 
           results.push({
@@ -42,6 +44,7 @@ export class MailController {
             status: "sent",
             messageId: response.data?.id,
             userId: lead.userId,
+            batch: lead.batch ?? null, // ✅ batch por lead
           });
         } catch (err: any) {
           results.push({
@@ -50,6 +53,7 @@ export class MailController {
             status: "error",
             error: err.message || "Unknown error",
             userId: lead.userId,
+            batch: lead.batch, // ✅ NO perder batch
           });
         }
       }
@@ -61,5 +65,9 @@ export class MailController {
       failed: results.filter((r) => r.status === "error").length,
       results,
     };
+  }
+  @Get("campaing/:userId")
+  async getByUserId(@Param("userId") userId: string) {
+    return this.mailService.findCampaingByUserId(userId);
   }
 }

@@ -8,6 +8,8 @@ import {
   PlainTextExport,
   PlainTextExportSchema,
 } from "./plain-text-export.schema";
+import { ChatModule } from "../chat-model/chat/chat.module";
+import { EmailPromptService } from "./lib/utils";
 
 @Module({
   imports: [
@@ -18,8 +20,10 @@ import {
     MongooseModule.forFeature([
       { name: PlainTextExport.name, schema: PlainTextExportSchema },
     ]),
+    ChatModule,
   ],
   controllers: [BatchesController],
-  providers: [BatchesService, GoogleService],
+  providers: [BatchesService, GoogleService, EmailPromptService],
+  exports: [BatchesService],
 })
 export class BatchesModule {}

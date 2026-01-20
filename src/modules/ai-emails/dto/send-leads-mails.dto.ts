@@ -19,6 +19,9 @@ export class LeadDto {
 
   @IsString()
   nivel_interes: string;
+
+  @IsString()
+  batch: string;
 }
 
 export class SendLeadsMailsDto {

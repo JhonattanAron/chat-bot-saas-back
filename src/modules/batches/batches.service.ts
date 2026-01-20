@@ -12,6 +12,8 @@ import { Lead } from "./lead.schema";
 import * as cheerio from "cheerio";
 import { PlainTextExport } from "./plain-text-export.schema";
 import { title } from "process";
+import { ChatService } from "../chat-model/chat/chat.service";
+import { EmailPromptService } from "./lib/utils";
 
 @Injectable()
 export class BatchesService {
@@ -20,7 +22,9 @@ export class BatchesService {
     @InjectModel(Lead.name) private leadModel: Model<Lead>,
     @InjectModel(PlainTextExport.name)
     private plainTextExportModel: Model<PlainTextExport>,
-    private readonly googleService: GoogleService
+    private readonly googleService: GoogleService,
+    private readonly chatPredictService: ChatService,
+    private readonly emailpromtService: EmailPromptService,
   ) {}
 
   async getLatestExport(batchId: string): Promise<{
@@ -69,7 +73,7 @@ export class BatchesService {
 
     try {
       // Buscar en Google
-      const results = await this.googleService.search(searchQuery, 100);
+      const results = await this.googleService.search(searchQuery, 10);
 
       if (!results || results.length === 0) {
         await this.batchModel.findByIdAndUpdate(batch._id, {
@@ -217,7 +221,7 @@ export class BatchesService {
       ...new Set(
         $("body")
           .text()
-          .match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || []
+          .match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [],
       ),
     ].slice(0, 5);
 
@@ -226,7 +230,7 @@ export class BatchesService {
       ...new Set(
         $("body")
           .text()
-          .match(/\+?\d[\d\s().-]{7,}/g) || []
+          .match(/\+?\d[\d\s().-]{7,}/g) || [],
       ),
     ].slice(0, 3);
 
@@ -277,7 +281,7 @@ export class BatchesService {
 
     if (!leads || leads.length === 0) {
       throw new BadRequestException(
-        "No extracted leads found. Please extract information first."
+        "No extracted leads found. Please extract information first.",
       );
     }
 
@@ -291,19 +295,19 @@ export class BatchesService {
       plainTextLines.push(
         `CORREOS: ${
           lead.emails && lead.emails.length > 0 ? lead.emails.join(", ") : "N/A"
-        }`
+        }`,
       );
       plainTextLines.push(
         `TELÉFONOS: ${
           lead.phones && lead.phones.length > 0 ? lead.phones.join(", ") : "N/A"
-        }`
+        }`,
       );
       plainTextLines.push(
         `REDES: ${
           lead.social_links && lead.social_links.length > 0
             ? lead.social_links.join(", ")
             : "N/A"
-        }`
+        }`,
       );
       plainTextLines.push("----------------------------------------");
       plainTextLines.push(""); // línea vacía entre registros
@@ -339,12 +343,12 @@ export class BatchesService {
   async updateAnalizedData(
     id: string,
     analized: boolean,
-    analized_data: string
+    analized_data: string,
   ): Promise<PlainTextExport> {
     const updated = await this.plainTextExportModel.findByIdAndUpdate(
       id,
       { analized, analized_data, updatedAt: new Date() },
-      { new: true } // devuelve el documento actualizado
+      { new: true }, // devuelve el documento actualizado
     );
 
     if (!updated) {
@@ -366,5 +370,134 @@ export class BatchesService {
     }
 
     return data;
+  }
+
+  async getEmailsByBatchId(batchId: string) {
+    const leads = await this.leadModel.find({
+      batch_id: batchId,
+      extraction_status: "extracted",
+    });
+
+    const batch = await this.batchModel.findById(batchId);
+
+    return {
+      batch_id: batchId,
+      search_query: batch?.search_query || "Unknown",
+      leads: leads.map((l) => ({
+        leadId: l._id.toString(),
+        emails: l.emails ?? [],
+      })),
+    };
+  }
+
+  async getAllEmailsGroupedByBatch(): Promise<
+    { batch_id: string; search_query: string; emails: string[] }[]
+  > {
+    const leads = await this.leadModel.find({
+      extraction_status: "extracted",
+    });
+
+    const grouped = leads.reduce(
+      (acc, lead) => {
+        const batchId = lead.batch_id;
+        if (!acc[batchId]) {
+          acc[batchId] = [];
+        }
+        acc[batchId].push(...lead.emails.filter((email) => email));
+        return acc;
+      },
+      {} as Record<string, string[]>,
+    );
+
+    const result = await Promise.all(
+      Object.entries(grouped).map(async ([batchId, emails]) => {
+        const batch = await this.batchModel.findById(batchId);
+        return {
+          batch_id: batchId,
+          search_query: batch?.search_query || "Unknown",
+          emails: [...new Set(emails)],
+        };
+      }),
+    );
+
+    return result;
+  }
+  async normalizeEmailsWithAI(
+    userId: string,
+    batchId: string,
+    leads: { leadId: string; emails: string[] }[],
+  ) {
+    if (!leads || leads.length === 0) {
+      throw new BadRequestException("No leads provided");
+    }
+
+    // 1️⃣ Construir UN SOLO PROMPT con TODOS los leads
+    const prompt =
+      this.emailpromtService.buildNormalizeLeadsEmailsPrompt(leads);
+
+    // 2️⃣ UNA sola llamada a la IA
+    const chat = await this.chatPredictService.singlePredict(userId, prompt);
+
+    const rawOutput = chat.messages?.[chat.messages.length - 1]?.content || "";
+
+    let parsed: {
+      leads: { leadId: string; emails: string[] }[];
+    };
+
+    try {
+      parsed = JSON.parse(rawOutput);
+    } catch {
+      throw new BadRequestException("AI response is not valid JSON");
+    }
+
+    if (!Array.isArray(parsed.leads)) {
+      throw new BadRequestException("AI response has invalid format");
+    }
+
+    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    // 3️⃣ Actualizar cada lead con SUS emails
+    for (const lead of parsed.leads) {
+      if (!lead.leadId || !Array.isArray(lead.emails)) continue;
+
+      const normalized = [
+        ...new Set(
+          lead.emails
+            .map((e) => e.toLowerCase().trim())
+            .filter((e) => EMAIL_REGEX.test(e)),
+        ),
+      ];
+
+      await this.leadModel.findByIdAndUpdate(lead.leadId, {
+        emails: normalized,
+      });
+    }
+
+    // 4️⃣ Marcar batch como normalizado
+    await this.batchModel.findByIdAndUpdate(batchId, {
+      normalized_with_ai: true,
+      updatedAt: new Date(),
+    });
+
+    // 5️⃣ Retornar estado
+    return {
+      batch_id: batchId,
+      success: true,
+      normalized_leads: parsed.leads.length,
+    };
+  }
+  async countLeads(batchId: string, status: string) {
+    return this.leadModel.countDocuments({
+      batch_id: batchId,
+      extraction_status: status,
+    });
+  }
+
+  async getExtractedLeadsWithEmails(batchId: string) {
+    return this.leadModel.find({
+      batch_id: batchId,
+      extraction_status: "extracted",
+      emails: { $exists: true, $ne: [] },
+    });
   }
 }

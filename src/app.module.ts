@@ -18,6 +18,7 @@ import { PlansModule } from "./modules/plans/plans.module";
 import { BatchesModule } from "./modules/batches/batches.module";
 import { SystemModule } from "./modules/system/system.module";
 import { MailModule } from "./modules/ai-emails/mail.module";
+import { CampaignsModule } from "./modules/automated-tasks/campaign-automated/campaign-automated.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { MailModule } from "./modules/ai-emails/mail.module";
     MailModule,
     BatchesModule,
     SystemModule,
+    CampaignsModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

@@ -24,6 +24,8 @@ export class MailLog extends Document {
 
   @Prop({ default: "sent" })
   status: string; // sent | delivered | opened | bounced
+  @Prop({ required: true })
+  batch: string;
 }
 
 export const MailLogSchema = SchemaFactory.createForClass(MailLog);

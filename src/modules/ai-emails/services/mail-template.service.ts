@@ -11,157 +11,200 @@ export class MailTemplateService {
   createHtmlTemplate(content: string): string {
     const template = `
     <!DOCTYPE html>
-    <html lang="es">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Digital Prime Solutions</title>
-      </head>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Prime Solutions</title>
+  </head>
 
-      <body
-        style="
-          margin: 0;
-          padding: 0;
-          background-color: #0000;
-          font-family: Arial, sans-serif;
-        "
-      >
-        <table width="100%" cellpadding="0" cellspacing="0" style="padding: 22px">
-          <tr>
-            <td align="center">
-              <table
-                cellpadding="0"
-                cellspacing="0"
-                style="
-                  background-color: #ffffff;
-                  border-radius: 8px;
-                  overflow: hidden;
-                  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-                "
-              >
-                <!-- HEADER FIJO -->
-                <tr>
-                  <td
-                    align="center"
-                    style="background-color: #333333; padding: 24px"
-                  >
-                    <img
-                      src="https://i.imgur.com/0oINgk3.png"
-                      alt="Digital Prime Solutions"
-                      width="100"
-                    />
-                  </td>
-                </tr>
-
-                <!-- CONTENIDO DINÁMICO -->
-                <tr>
-                  <td style="padding: 26px; color: #333333">
-                    ${content}
-                  </td>
-                </tr>
-
-                <!-- FOOTER FIJO -->
-                <tr>
-  <td
+  <body
     style="
-      background-color: #f1f5f9;
-      padding: 20px 16px;
-      text-align: center;
-      font-size: 13px;
-      color: #6b7280;
+      margin: 0;
+      padding: 0;
+      background-color: #0000;
       font-family: Arial, sans-serif;
     "
   >
-    <p style="margin: 0 0 8px;">
-      Agencia de Marketing Digital · Google Partner
-    </p>
-    <p style="margin: 0 0 12px;">
-      📍 Girona · Madrid · Barcelona
-    </p>
-    <div style="display: inline-flex; gap: 10px; justify-content: center;">
-      <a href="https://wa.me/34639245923" target="_blank" style="background-color:#25D366; color:#fff; text-decoration:none; padding:8px 14px; border-radius:5px; font-weight:bold; font-size:14px;">
-        📱 WhatsApp
-      </a>
-      <a href="mailto:info@digitalprimesolutions.com" style="background-color:#0072C6; color:#fff; text-decoration:none; padding:8px 14px; border-radius:5px; font-weight:bold; font-size:14px;">
-        📧 Email
-      </a>
-      <a href="https://digitalprimesolutions.com" target="_blank" style="background-color:#4CAF50; color:#fff; text-decoration:none; padding:8px 14px; border-radius:5px; font-weight:bold; font-size:14px;">
-        🌐 Web
-      </a>
-    </div>
-  </td>
-</tr>
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding: 22px">
+      <tr>
+        <td align="center">
+          <table
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              background-color: #ffffff;
+              border-radius: 8px;
+              overflow: hidden;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            "
+          >
+            <!-- HEADER FIJO -->
+            <tr>
+              <td
+                align="center"
+                style="background-color: #333333; padding: 24px"
+              >
+                <img
+                  src="https://i.imgur.com/0oINgk3.png"
+                  alt="Digital Prime Solutions"
+                  width="100"
+                />
+              </td>
+            </tr>
 
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
+            <!-- CONTENIDO DINÁMICO -->
+            <tr>
+              <td style="padding: 26px; color: #333333">
+                ${content}
+
+                <!-- BOTONES DE CONTACTO -->
+                <div style="margin-top: 24px; text-align: center">
+                  <div
+                    style="
+                      display: inline-flex;
+                      gap: 10px;
+                      justify-content: center;
+                      flex-wrap: wrap;
+                    "
+                  >
+                    <a
+                      href="https://wa.me/34639245923"
+                      target="_blank"
+                      style="
+                        background-color: #25d366;
+                        color: #ffffff;
+                        text-decoration: none;
+                        padding: 10px 16px;
+                        border-radius: 5px;
+                        font-weight: bold;
+                        font-size: 14px;
+                        display: inline-block;
+                      "
+                    >
+                      📱 WhatsApp
+                    </a>
+
+                    <a
+                      href="mailto:info@digitalprimesolutions.com"
+                      style="
+                        background-color: #0072c6;
+                        color: #ffffff;
+                        text-decoration: none;
+                        padding: 10px 16px;
+                        border-radius: 5px;
+                        font-weight: bold;
+                        font-size: 14px;
+                        display: inline-block;
+                      "
+                    >
+                      📧 Email
+                    </a>
+
+                    <a
+                      href="https://digitalprimesolutions.com"
+                      target="_blank"
+                      style="
+                        background-color: #4caf50;
+                        color: #ffffff;
+                        text-decoration: none;
+                        padding: 10px 16px;
+                        border-radius: 5px;
+                        font-weight: bold;
+                        font-size: 14px;
+                        display: inline-block;
+                      "
+                    >
+                      🌐 Web
+                    </a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- FOOTER FIJO -->
+            <tr>
+              <td
+                style="
+                  background-color: #f1f5f9;
+                  padding: 16px;
+                  text-align: center;
+                  font-size: 13px;
+                  color: #6b7280;
+                  font-family: Arial, sans-serif;
+                "
+              >
+                <p style="margin: 0 0 6px">
+                  Agencia de Marketing Digital · Google Partner
+                </p>
+                <p style="margin: 0">📍 Girona · Madrid · Barcelona</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+
     `;
     return template;
   }
 
   createPromptTemplate(context: object): string {
     const contextString = JSON.stringify(context, null, 2);
+
     const prompt = `
-Genera únicamente el contenido HTML para un correo dirigido a una empresa, que será el correo final listo para enviar, sin textos genéricos ni placeholders. Usa directamente los datos reales de la empresa y su análisis.
+Genera únicamente el contenido HTML final de un correo listo para enviar.
 
-El correo debe tener un tono profesional, cercano y persuasivo, como si fuera escrito por Luis, CEO de Digital Prime Solutions. Incluye emojis relevantes para destacar puntos importantes y hacer el correo más atractivo visualmente y amigable.
+El correo DEBE:
+- Estar escrito en segunda persona (tuteo): usa "tú", "tu negocio", "tu presencia digital".
+- Sonar humano, cercano y natural, como una conversación real.
+- Evitar completamente lenguaje corporativo, robótico o excesivamente técnico.
+- No incluir precios, cifras económicas ni referencias a costos.
+- No usar placeholders ni textos genéricos.
+- No mencionar que es un "análisis automatizado" o generado por IA.
+- Mencionar de forma natural que, si se llega a un acuerdo, Digital Prime Solutions trabaja con exclusividad por zona o área geográfica, 
+  para no colaborar con competidores directos del negocio.
+- Esta mención debe sonar como un valor añadido y una ventaja estratégica, 
+  no como una condición legal ni una imposición.
 
-Usa la siguiente información del análisis y los servicios que ofrece la empresa para construir un correo completo, claro y enfocado en mostrar valor y motivar a la acción.
 
-Información de la empresa:
+El correo debe parecer escrito por Luis, CEO de Digital Prime Solutions, hablando directamente con el responsable del negocio.
+
+Usa la información real del análisis para personalizar el mensaje.
+
+Información del negocio analizado:
 ${contextString}
 
-Servicios y precios que ofrece Digital Prime Solutions:
+Servicios que ofrece Digital Prime Solutions (usar solo para construir el mensaje, NO listar ni mencionar precios):
 
-- SEO: 600 €/MES  
-- SOCIAL ADS: 550 €/MES  
-- PÁGINA WEB: 700 €/MES  
-- MANTENIMIENTO WEB: 50 €/MES  
-- GOOGLE ADS: 600 €/MES  
-- CONTENIDO Y PRODUCCIÓN (CREACIÓN): 650 €  
-- LANDING PAGE: 300 €  
-- ASESORÍA/MENTORÍA: 50 $  
-- AUTOMATIZACIONES CON IA MEDIANTE CHAT: 150 €/MES  
-- ASISTENTE TELEFÓNICO INTELIGENTE CON IA: 450 €/MES  
-- SKRAPING + CAMPAÑAS DE CORREOS PERSONALIZADOS CON IA: 150 €/MES  
+- SEO y posicionamiento en Google
+- Optimización de Google My Business (visibilidad local)
+- Campañas en Google Ads y Meta Ads
+- Creación y optimización de páginas web
+- Automatizaciones con IA mediante chat 🤖
+- Asistente telefónico inteligente con IA 📞
+- Sistemas que pueden agendar citas automáticamente
+- Soluciones que pueden ahorrar hasta 8 horas semanales de trabajo humano
 
-Paquetes:
+El correo debe incluir:
 
-1. PAQUETE DE VISIBILIDAD BÁSICO (950 €/MES)
-   - SEO
-   - Optimización perfil Google My Business (posicionamiento local)
-   - Campañas de Google Ads
+- Un saludo cercano usando el nombre real del negocio.
+- Una apertura cálida y humana, por ejemplo:
+  "Soy Luis Caritg, un placer saludarte. Hemos hecho un análisis de tu presencia digital y vemos una oportunidad clara de mejora..."
+- Explicación sencilla de los puntos detectados y cómo están afectando la captación de clientes.
+- Beneficios explicados de forma clara, usando emojis con moderación.
+- Mención de soluciones con IA como una ventaja moderna y práctica.
+- Invitación a conversar sin presión (llamada, WhatsApp o respuesta directa).
+- Cierre cercano y firma de Luis.
 
-2. PAQUETE GROWTH (1250 €/MES)
-   - SEO
-   - Optimización perfil Google My Business (posicionamiento local)
-   - Campañas de Google Ads
-   - Meta Ads
+Usa únicamente etiquetas HTML compatibles con email:
+<h1>, <h2>, <p>, <ul>, <li>, <strong>
 
-3. PAQUETE COMPLETO (1650 €/MES) — Ahorro de 750 €/MES
-   - SEO
-   - Optimización perfil Google My Business (posicionamiento local)
-   - Campañas de Google Ads
-   - Meta Ads
-   - Creación de contenido (gestión de redes sociales)
-
-Contenido que debe incluir el correo:
-
-- Un saludo cordial personalizado con el nombre real de la empresa.
-- Una introducción natural mencionando que Luis, CEO de Digital Prime Solutions, realizó un análisis y comprende la situación de la clínica.
-- Explicación clara y amigable de por qué la clínica necesita servicios digitales y SEO, con emojis para enfatizar beneficios.
-- Descripción de cómo los servicios y paquetes pueden ayudar, destacando puntos clave con emojis.
-- Invitar a la acción amable para contactar y explorar las opciones.
-- Un cierre profesional firmado por Luis SEO.
-- destaca servicios como los de IA, automatizaciones y asistentes telefónicos inteligentes PUEDEN AGENDAR CITAS , RESPONDER LLAMDAS HASTA AHORRAR 8 HORAS SEMANALES DE TRABAJO HUMANO.
-
-Utiliza solo etiquetas HTML adecuadas para email: <h1>, <h2>, <p>, <ul>, <li>, etc.
-
-Genera solo el contenido HTML final, sin texto explicativo ni placeholders, con datos reales ya insertados y en formato listo para enviar.
+Genera SOLO el HTML final del correo puedes agregar emojis negrita para que sea mas amigable, sin explicaciones ni texto adicional.
 `;
+
     return prompt;
   }
 }
