@@ -1,0 +1,450 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var TelegramChatService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TelegramChatService = void 0;
+const common_1 = require("@nestjs/common");
+const mongoose_1 = require("mongoose");
+const telegram_chat_schema_1 = require("./schemas/telegram-chat.schema");
+const telegram_bot_schema_1 = require("./schemas/telegram-bot.schema");
+const prompt_generator_service_1 = require("../chat-model/config/prompt-generator.service");
+const predictions_service_1 = require("../chat-model/model-ai/predictions.service");
+const products_service_1 = require("../products/products.service");
+const users_service_1 = require("../users/users.service");
+const faqs_service_1 = require("../faqs/faqs.service");
+const custom_function_service_1 = require("../chat-model/services/custom-function.service");
+const mongoose_2 = require("@nestjs/mongoose");
+let TelegramChatService = TelegramChatService_1 = class TelegramChatService {
+    constructor(telegramChatModel, telegramBotModel, promptGen, predictionService, productSearchService, userService, faqsService, customFunctionService) {
+        this.telegramChatModel = telegramChatModel;
+        this.telegramBotModel = telegramBotModel;
+        this.promptGen = promptGen;
+        this.predictionService = predictionService;
+        this.productSearchService = productSearchService;
+        this.userService = userService;
+        this.faqsService = faqsService;
+        this.customFunctionService = customFunctionService;
+        this.logger = new common_1.Logger(TelegramChatService_1.name);
+        this.telegramClients = new Map();
+    }
+    async connectBot(token, userId, assistantId) {
+        try {
+            const botInfo = await this.validateBotToken(token);
+            const existingBot = await this.telegramBotModel.findOne({ token });
+            if (existingBot) {
+                throw new Error("Bot already connected");
+            }
+            const bot = new this.telegramBotModel({
+                token,
+                userId,
+                assistantId,
+                botName: botInfo.first_name,
+                botUsername: botInfo.username,
+                botId: botInfo.id.toString(),
+                botInfo,
+                connectedAt: new Date(),
+                lastActivityAt: new Date(),
+            });
+            const savedBot = await bot.save();
+            const webhook = await this.setTelegramWebhook(token);
+            this.telegramClients.set(savedBot._id.toString(), {
+                token,
+                botInfo,
+                userId,
+                assistantId,
+            });
+            this.logger.log(`Bot connected: ${webhook} ${botInfo.username} (${botInfo.id})`);
+            return savedBot;
+        }
+        catch (error) {
+            this.logger.error("Error connecting bot:", error);
+            throw error;
+        }
+    }
+    async runTelegramAgent(userId, assistantId, userMessage, memoryContext) {
+        const context = await this.userService.getAssistantById(assistantId, userId);
+        if (!context)
+            throw new Error("Assistant not found");
+        const availableFunctions = await this.customFunctionService.getFunctionsList(userId, assistantId);
+        const firstPrompt = this.promptGen.generateUnifiedPrompt(context.name, context.description, memoryContext, userMessage, availableFunctions);
+        const firstPrediction = await this.predictionService.predict(firstPrompt);
+        let input_tokens = firstPrediction.input_tokens || 0;
+        let output_tokens = firstPrediction.output_tokens || 0;
+        const functionCall = this.customFunctionService.parseFunctionCall(firstPrediction.output);
+        if (!functionCall) {
+            return {
+                response: firstPrediction.output,
+                input_tokens,
+                output_tokens,
+            };
+        }
+        const functionResult = !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(functionCall.functionName)
+            ? await this.customFunctionService.executeFunction(functionCall.functionName, functionCall.parameters, userId, assistantId)
+            : null;
+        const secondPrompt = this.promptGen.generateUnifiedPrompt(context.name, context.description, memoryContext, userMessage, availableFunctions, functionResult ? [functionResult] : []);
+        const secondPrediction = await this.predictionService.predict(secondPrompt);
+        input_tokens += secondPrediction.input_tokens || 0;
+        output_tokens += secondPrediction.output_tokens || 0;
+        return {
+            response: secondPrediction.output,
+            input_tokens,
+            output_tokens,
+            funcionesEjecutadas: functionResult
+                ? [
+                    `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`,
+                ]
+                : [],
+        };
+    }
+    async setTelegramWebhook(botToken) {
+        const webhookUrl = `${process.env.PUBLIC_URL}/telegram-chat/webhook/${botToken}`;
+        const url = `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.ok) {
+            throw new Error("Failed to set webhook: " + data.description);
+        }
+        this.logger.log("Webhook registered successfully: " + webhookUrl);
+    }
+    async disconnectBot(botId) {
+        try {
+            const result = await this.telegramBotModel.deleteOne({ _id: botId });
+            this.telegramClients.delete(botId);
+            this.logger.log(`Bot disconnected: ${botId}`);
+            return result.deletedCount > 0;
+        }
+        catch (error) {
+            this.logger.error("Error disconnecting bot:", error);
+            throw error;
+        }
+    }
+    async getConnectedBots(userId) {
+        const filter = userId ? { userId } : {};
+        return this.telegramBotModel.find(filter).sort({ connectedAt: -1 });
+    }
+    async sendMessageWithBot(botId, chatId, message) {
+        const client = this.telegramClients.get(botId);
+        if (!client) {
+            throw new Error("Bot not found or not connected");
+        }
+        return this.sendTelegramMessage(client.token, chatId, message);
+    }
+    async validateBotToken(token) {
+        try {
+            const url = `https://api.telegram.org/bot${token}/getMe`;
+            const response = await fetch(url);
+            const result = await response.json();
+            if (!result.ok) {
+                throw new Error("Invalid bot token");
+            }
+            return result.result;
+        }
+        catch (error) {
+            throw new Error("Failed to validate bot token");
+        }
+    }
+    async findBotByToken(token) {
+        return this.telegramBotModel.findOne({ token, isActive: true });
+    }
+    async createTelegramChat(userId, assistantId, telegramChatId, telegramUserId, message, username, firstName, lastName, messageId) {
+        const existingChat = await this.telegramChatModel.findOne({
+            telegramChatId,
+        });
+        if (existingChat) {
+            return this.addTelegramMessage(existingChat._id.toString(), assistantId, "user", message, messageId);
+        }
+        const result = await this.runTelegramAgent(userId, assistantId, message, "");
+        const cleanedResponse = this.cleanModelResponse(result.response);
+        const importantInfo = this.extractImportantInfo(result.response);
+        const chat = new this.telegramChatModel({
+            userId,
+            assistantId,
+            telegramChatId,
+            telegramUserId,
+            username: username || "",
+            firstName: firstName || "",
+            lastName: lastName || "",
+            messages: [
+                {
+                    role: "user",
+                    content: message,
+                    createdAt: new Date(),
+                    messageId,
+                    messageType: "text",
+                },
+                {
+                    role: "assistant",
+                    content: cleanedResponse,
+                    createdAt: new Date(),
+                    important_info: this.buildCompleteImportantInfo(importantInfo, result.funcionesEjecutadas || []),
+                    messageType: "text",
+                },
+            ],
+            input_tokens: result.input_tokens,
+            output_tokens: result.output_tokens,
+            lastActivityAt: new Date(),
+        });
+        return chat.save();
+    }
+    async addTelegramMessage(chatId, assistantId, role, content, messageId) {
+        const chat = await this.telegramChatModel.findById(chatId);
+        if (!chat)
+            throw new Error("Chat not found");
+        if (role !== "user")
+            return chat;
+        await this.telegramChatModel.updateOne({ _id: chatId }, {
+            $push: {
+                messages: {
+                    role: "user",
+                    content,
+                    createdAt: new Date(),
+                    messageId,
+                    messageType: "text",
+                },
+            },
+            $set: { lastActivityAt: new Date() },
+        });
+        const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
+        const result = await this.runTelegramAgent(chat.userId, assistantId, content, memoryContext);
+        const cleanedResponse = this.cleanModelResponse(result.response);
+        const importantInfo = this.extractImportantInfo(result.response);
+        await this.telegramChatModel.updateOne({ _id: chatId }, {
+            $push: {
+                messages: {
+                    role: "assistant",
+                    content: cleanedResponse,
+                    createdAt: new Date(),
+                    important_info: this.buildCompleteImportantInfo(importantInfo, result.funcionesEjecutadas || []),
+                    messageType: "text",
+                },
+            },
+            $inc: {
+                input_tokens: result.input_tokens,
+                output_tokens: result.output_tokens,
+            },
+        });
+        return this.telegramChatModel.findById(chatId);
+    }
+    async getTelegramChat(chatId) {
+        return this.telegramChatModel.findById(chatId);
+    }
+    async getTelegramChatByTelegramId(telegramChatId) {
+        return this.telegramChatModel.findOne({ telegramChatId });
+    }
+    async getUserTelegramChats(userId) {
+        return this.telegramChatModel.find({ userId }).sort({ lastActivityAt: -1 });
+    }
+    async getAssistantTelegramChats(assistantId) {
+        return this.telegramChatModel
+            .find({ assistantId })
+            .sort({ lastActivityAt: -1 });
+    }
+    async handleTelegramWebhook(webhookData, botToken) {
+        try {
+            this.logger.log("Received Telegram webhook:", JSON.stringify(webhookData, null, 2));
+            console.log(botToken);
+            const bot = await this.findBotByToken(botToken);
+            if (!bot) {
+                this.logger.error(`No bot found for token`);
+                return { success: false, error: "Bot not found" };
+            }
+            if (webhookData.message) {
+                const message = webhookData.message;
+                const from = message.from;
+                const telegramChatId = message.chat.id.toString();
+                const telegramUserId = from.id.toString();
+                const messageContent = message.text || message.caption || "Multimedia message";
+                const messageId = message.message_id;
+                const messageType = this.getTelegramMessageType(message);
+                const username = from.username || "";
+                const firstName = from.first_name || "";
+                const lastName = from.last_name || "";
+                const chat = await this.createTelegramChat(bot.userId, bot.assistantId, telegramChatId, telegramUserId, messageContent, username, firstName, lastName, messageId);
+                if (!chat) {
+                    return { error: "Failed to create or update chat" };
+                }
+                const lastMessage = chat.messages[chat.messages.length - 1];
+                if (lastMessage.role === "assistant") {
+                    await this.sendTelegramMessage(bot.token, telegramChatId, lastMessage.content);
+                }
+                await this.telegramBotModel.updateOne({ _id: bot._id }, { lastActivityAt: new Date() });
+                return { success: true, chatId: chat._id };
+            }
+            return { success: true, message: "Webhook processed" };
+        }
+        catch (error) {
+            this.logger.error("Error processing Telegram webhook:", error);
+            return { success: false, error: error.message };
+        }
+    }
+    getTelegramMessageType(message) {
+        if (message.text)
+            return "text";
+        if (message.photo)
+            return "photo";
+        if (message.audio)
+            return "audio";
+        if (message.voice)
+            return "voice";
+        if (message.video)
+            return "video";
+        if (message.document)
+            return "document";
+        if (message.sticker)
+            return "sticker";
+        if (message.location)
+            return "location";
+        if (message.contact)
+            return "contact";
+        return "unknown";
+    }
+    async processModelResponse(response, userId, assistantId) {
+        let faqInfo = "";
+        let productosString = "";
+        const functionResults = [];
+        const funcionesEjecutadas = [];
+        const faqMatch = response.match(/\[FAQ:([^\]]+)\]/);
+        if (faqMatch) {
+            const faqQuery = faqMatch[1].trim();
+            funcionesEjecutadas.push(`[FAQ:${faqQuery}]`);
+            const faqResults = await this.faqsService.search(faqQuery, userId, assistantId);
+            if (faqResults && faqResults.length > 0) {
+                faqInfo = faqResults[0].answer;
+            }
+            else {
+                faqInfo = "No se encontró información de FAQ para esa pregunta.";
+            }
+        }
+        const searchMatch = response.match(/\[SEARCH:([^\]]+)\]/);
+        if (searchMatch) {
+            const searchTerm = searchMatch[1].trim();
+            funcionesEjecutadas.push(`[SEARCH:${searchTerm}]`);
+            const relatedProducts = await this.productSearchService.search(searchTerm, userId);
+            if (relatedProducts.length === 0) {
+                productosString = "No se encontraron productos con ese término.";
+            }
+            else {
+                productosString = relatedProducts.map((p) => p.name).join(", ");
+            }
+        }
+        const functionCall = this.customFunctionService.parseFunctionCall(response);
+        if (functionCall) {
+            if (!["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(functionCall.functionName)) {
+                const functionResult = await this.customFunctionService.executeFunction(functionCall.functionName, functionCall.parameters, userId, assistantId);
+                functionResults.push(functionResult);
+                funcionesEjecutadas.push(`[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`);
+            }
+        }
+        const importantInfoFromAnalysis = this.extractImportantInfo(response);
+        return {
+            faqInfo,
+            productosString,
+            functionResults,
+            funcionesEjecutadas,
+            importantInfo: importantInfoFromAnalysis,
+        };
+    }
+    extractImportantInfo(response) {
+        const importantInfoMatch = response.match(/\[IMPORTANT_INFO:([^\]]+)\]/);
+        return importantInfoMatch ? importantInfoMatch[1].trim() : "";
+    }
+    cleanModelResponse(response) {
+        return response
+            .replace(/\[FAQ:.*?\]/gi, "")
+            .replace(/\[SEARCH:.*?\]/gi, "")
+            .replace(/\[[A-Z_]+:.*?\]/gi, "")
+            .replace(/\[IMPORTANT_INFO:.*?\]/gi, "")
+            .replace(/Respuesta:\s*/gi, "")
+            .trim();
+    }
+    buildCompleteImportantInfo(importantInfo, funcionesEjecutadas) {
+        const funcionesStr = funcionesEjecutadas.length
+            ? ` [FUNCIONES_EJECUTADAS: ${funcionesEjecutadas.join(" ")}]`
+            : "";
+        const finalImportantInfoContent = importantInfo && importantInfo !== "lo_que_necesita"
+            ? importantInfo
+            : "información general";
+        return `[IMPORTANT_INFO: ${finalImportantInfoContent}${funcionesStr}]`;
+    }
+    buildEnhancedMemoryContext(messages) {
+        const memoryParts = [];
+        const recentMessages = messages
+            .filter((msg) => msg.role === "assistant" ||
+            (msg.role === "user" && messages.indexOf(msg) > messages.length - 5))
+            .slice(-4);
+        for (let i = 0; i < recentMessages.length; i += 2) {
+            const userMsg = recentMessages[i];
+            const assistantMsg = recentMessages[i + 1];
+            if (userMsg &&
+                assistantMsg &&
+                userMsg.role === "user" &&
+                assistantMsg.role === "assistant") {
+                const userContent = userMsg.content || "";
+                const assistantImportantInfo = assistantMsg.important_info || "";
+                let mainInfo = "";
+                let functionsUsed = "";
+                const mainInfoMatch = assistantImportantInfo.match(/\[IMPORTANT_INFO: ([^[]+)/);
+                if (mainInfoMatch && mainInfoMatch[1].trim() !== "lo_que_necesita") {
+                    mainInfo = mainInfoMatch[1].trim();
+                }
+                const functionsMatch = assistantImportantInfo.match(/\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/);
+                if (functionsMatch) {
+                    functionsUsed = functionsMatch[1];
+                }
+                memoryParts.push(`Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo || "información general"} | Funciones usadas: ${functionsUsed || "ninguna"}`);
+            }
+        }
+        return memoryParts.length > 0
+            ? `CONVERSACIÓN PREVIA: ${memoryParts.join(" || ")}`
+            : "";
+    }
+    async sendTelegramMessage(botToken, chatId, message) {
+        try {
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                    parse_mode: "HTML",
+                }),
+            });
+            const result = await response.json();
+            this.logger.log(`Telegram message sent to ${chatId}:`, result);
+            return result;
+        }
+        catch (error) {
+            this.logger.error(`Error sending Telegram message:`, error);
+            throw error;
+        }
+    }
+};
+exports.TelegramChatService = TelegramChatService;
+exports.TelegramChatService = TelegramChatService = TelegramChatService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_2.InjectModel)(telegram_chat_schema_1.TelegramChat.name)),
+    __param(1, (0, mongoose_2.InjectModel)(telegram_bot_schema_1.TelegramBot.name)),
+    __metadata("design:paramtypes", [mongoose_1.Model,
+        mongoose_1.Model,
+        prompt_generator_service_1.PromptGeneratorService,
+        predictions_service_1.PredictionService,
+        products_service_1.ProductsService,
+        users_service_1.UsersService,
+        faqs_service_1.FaqsService,
+        custom_function_service_1.CustomFunctionService])
+], TelegramChatService);
+//# sourceMappingURL=telegram-chat.service.js.map
