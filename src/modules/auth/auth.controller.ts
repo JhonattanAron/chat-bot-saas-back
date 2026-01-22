@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
   UnauthorizedException,
@@ -18,7 +20,7 @@ import { User } from "../users/schemas/UserSchema";
 export class AuthController {
   constructor(
     private authService: AuthService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
   ) {}
 
   @HttpCode(HttpStatus.OK)
@@ -27,7 +29,7 @@ export class AuthController {
     const result = await this.authService.signIn(
       signInDto.email,
       signInDto.password,
-      res
+      res,
     );
     return res.json(result);
   }
@@ -63,5 +65,29 @@ export class AuthController {
       console.error("Error en /auth/google-login:", error);
       throw new console.error("Error interno");
     }
+  }
+
+  @Post("register")
+  async register(
+    @Body("name") name: string,
+    @Body("email") email: string,
+    @Body("password") password: string,
+  ) {
+    console.log(Body);
+
+    if (!name || !email || !password) {
+      throw new BadRequestException("Todos los campos son obligatorios");
+    }
+
+    return this.authService.register(name, email, password);
+  }
+
+  @Get("verify-email")
+  async verifyEmail(@Query("token") token: string) {
+    if (!token) {
+      throw new BadRequestException("Token no proporcionado");
+    }
+
+    return this.authService.verifyEmail(token);
   }
 }

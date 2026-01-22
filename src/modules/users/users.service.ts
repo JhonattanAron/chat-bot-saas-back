@@ -11,9 +11,9 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { User } from "./schemas/UserSchema";
-import { FunctionSchema } from "./schemas/functions-schema";
 import { CreateAssistantDto } from "./schemas/create-asistantdto";
 import { FaqsService } from "../faqs/faqs.service";
+import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class UsersService {
@@ -21,7 +21,7 @@ export class UsersService {
     @InjectModel(AssistantChat.name)
     private model: Model<AssistantChatDocument>,
     @InjectModel(User.name) private userModel: Model<User>,
-    private readonly faqsService: FaqsService
+    private readonly faqsService: FaqsService,
   ) {}
 
   async createAssistantChatData(body: CreateAssistantDto) {
@@ -35,12 +35,12 @@ export class UsersService {
   async addFunctionToAssistant(
     assistantId: string,
     userId: string,
-    newFunction: any
+    newFunction: any,
   ) {
     const assistant = await this.model.findOneAndUpdate(
       { _id: assistantId, user_id: userId },
       { $push: { funciones: newFunction } },
-      { new: true }
+      { new: true },
     );
 
     if (!assistant) {
@@ -54,7 +54,7 @@ export class UsersService {
     assistantId: string,
     userId: string,
     functionId: string,
-    updateData: any
+    updateData: any,
   ) {
     // Construir el objeto de actualización dinámicamente
     const updateFields: any = {};
@@ -91,7 +91,7 @@ export class UsersService {
         "funciones._id": functionId,
       },
       { $set: updateFields },
-      { new: true }
+      { new: true },
     );
 
     if (!assistant) {
@@ -104,12 +104,12 @@ export class UsersService {
   async deleteFunction(
     assistantId: string,
     userId: string,
-    functionId: string
+    functionId: string,
   ) {
     const assistant = await this.model.findOneAndUpdate(
       { _id: assistantId, user_id: userId },
       { $pull: { funciones: { _id: functionId } } },
-      { new: true }
+      { new: true },
     );
 
     if (!assistant) {
@@ -127,7 +127,7 @@ export class UsersService {
       .exec();
     if (!assistant_chat) {
       throw new NotFoundException(
-        `No se encontró el chat con chat_id ${id} para el usuario ${user_id}`
+        `No se encontró el chat con chat_id ${id} para el usuario ${user_id}`,
       );
     }
 
@@ -159,7 +159,7 @@ export class UsersService {
 
   // ==================== MÉTODOS DE USUARIO ====================
 
-  async crearUsuario(usuario: User): Promise<User> {
+  async crearUsuario(usuario: Partial<User>): Promise<User> {
     const createdUsuario = new this.userModel(usuario);
     return createdUsuario.save();
   }
@@ -190,5 +190,82 @@ export class UsersService {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
     return deletedUsuario;
+  }
+  async findByVerificationToken(token: string): Promise<User | null> {
+    return this.userModel.findOne({
+      emailVerificationToken: token,
+    });
+  }
+
+  // ==================== MÉTODOS DE SEGURIDAD DE CONTRASEÑA ====================
+
+  private readonly SALT_ROUNDS = 10;
+
+  /**
+   * Hashea una contraseña usando bcrypt
+   */
+  async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, this.SALT_ROUNDS);
+  }
+
+  /**
+   * Compara una contraseña en texto plano con un hash
+   */
+  async comparePassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
+    return bcrypt.compare(plainPassword, hashedPassword);
+  }
+
+  /**
+   * Actualiza la contraseña de un usuario (la hashea antes de guardar)
+   */
+  async actualizarPassword(userId: string, newPassword: string): Promise<User> {
+    const hashedPassword = await this.hashPassword(newPassword);
+
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, { password: hashedPassword }, { new: true })
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
+    }
+
+    return updatedUser;
+  }
+
+  /**
+   * Verifica la contraseña actual y actualiza a una nueva
+   */
+  async cambiarPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
+    }
+
+    if (!user.password) {
+      throw new ConflictException(
+        "Este usuario no tiene contraseña configurada",
+      );
+    }
+
+    const isCurrentPasswordValid = await this.comparePassword(
+      currentPassword,
+      user.password,
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw new ConflictException("La contraseña actual es incorrecta");
+    }
+
+    await this.actualizarPassword(userId, newPassword);
+
+    return { message: "Contraseña actualizada correctamente" };
   }
 }

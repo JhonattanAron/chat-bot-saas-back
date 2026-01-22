@@ -1,20 +1,28 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { UsersService } from "../users/users.service";
 import { Response } from "express";
 import { User } from "../users/schemas/UserSchema";
+import { randomUUID } from "crypto";
+import { MailService } from "./service/confirmMail.service";
+import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
-    private userService: UsersService
+    private userService: UsersService,
+    private readonly mailService: MailService,
   ) {}
 
   async signIn(
     email: string,
     pass: string,
-    res: Response
+    res: Response,
   ): Promise<{ message: string }> {
     // Verificar si el usuario existe
     const user = await this.userService.obtenerUsuarios(email);
@@ -26,12 +34,13 @@ export class AuthService {
     // Verificar si el usuario no tiene contraseña pero tiene googleId
     if (!user.password && user.googleId) {
       throw new UnauthorizedException(
-        "Este usuario solo puede acceder con Google"
+        "Este usuario solo puede acceder con Google",
       );
     }
 
-    // Verificar si la contraseña es correcta
-    if (user.password !== pass) {
+    // Verificar si la contraseña es correcta usando bcrypt
+    const isPasswordValid = await bcrypt.compare(pass, user.password);
+    if (!isPasswordValid) {
       throw new UnauthorizedException("Credenciales inválidas");
     }
 
@@ -87,5 +96,61 @@ export class AuthService {
       email: user.email,
       token,
     };
+  }
+
+  // Número de rondas de salt para bcrypt (10-12 es recomendado)
+  private readonly SALT_ROUNDS = 10;
+
+  async register(name: string, email: string, password: string) {
+    const existingUser = await this.userService.obtenerUsuarios(email);
+
+    if (existingUser) {
+      throw new BadRequestException("El correo ya está registrado");
+    }
+
+    // Hashear la contraseña antes de guardarla
+    const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
+
+    const emailVerificationToken = randomUUID();
+
+    const user = await this.userService.crearUsuario({
+      name,
+      email,
+      password: hashedPassword,
+      emailVerified: false,
+      emailVerificationToken,
+    });
+
+    await this.mailService.sendVerificationEmail(
+      user.email,
+      emailVerificationToken,
+    );
+
+    return {
+      message: "Usuario registrado. Revisa tu correo para confirmar tu cuenta.",
+    };
+  }
+
+  async verifyEmail(token: string) {
+    if (!token) {
+      throw new BadRequestException("Token requerido");
+    }
+
+    const user = await this.userService.findByVerificationToken(token);
+
+    if (!user) {
+      throw new BadRequestException("Token inválido o expirado");
+    }
+
+    if (user.emailVerified) {
+      return { message: "El correo ya fue verificado" };
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationToken = "";
+
+    await user.save();
+
+    return { message: "Correo verificado correctamente" };
   }
 }
