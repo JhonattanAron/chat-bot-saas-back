@@ -208,27 +208,31 @@ export class WebChatConfigService {
       return { valid: false, error: "Client key is blocked" };
     }
 
-    // Update domain and first used timestamp if this is first use
     const updates: Partial<WebChatConfig> = {
       lastUsedAt: new Date(),
     };
 
-    // If first use, record the domain and change status to waiting_approval
+    // Si es el primer uso, guardar el origin completo
     if (!config.firstUsedAt) {
       updates.firstUsedAt = new Date();
-      updates.domain = validateDto.domain;
+      updates.origin = validateDto.context.origin; // Guardar origin completo
+
+      updates.domain =
+        validateDto.context.hostname ||
+        (validateDto.context.origin
+          ? new URL(validateDto.context.origin).hostname
+          : undefined);
 
       if (config.status === ClientKeyStatus.PENDING) {
         updates.status = ClientKeyStatus.WAITING_APPROVAL;
       }
     } else {
-      // Check if domain matches (security measure)
-      if (config.domain && config.domain !== validateDto.domain) {
-        return { valid: false, error: "Domain mismatch" };
+      // Verificar que el origin coincida (seguridad)
+      if (config.origin && config.origin !== validateDto.context.origin) {
+        return { valid: false, error: "Origin mismatch" };
       }
     }
 
-    // Increment usage count
     await this.webChatConfigModel.updateOne(
       { _id: config._id },
       {
@@ -237,19 +241,16 @@ export class WebChatConfigService {
       },
     );
 
-    // Return if approved
     if (config.status === ClientKeyStatus.APPROVED) {
       return { valid: true, config };
     }
 
-    // If not approved yet, return pending status
     return {
       valid: false,
       error: "Client key is pending approval",
       config,
     };
   }
-
   /**
    * Regenerate client key for existing config
    */
@@ -262,7 +263,7 @@ export class WebChatConfigService {
     config.clientKey = this.generateClientKey();
     config.status = ClientKeyStatus.PENDING;
     config.firstUsedAt = undefined;
-    config.domain = undefined;
+    config.domain = "";
     config.usageCount = 0;
 
     return config.save();

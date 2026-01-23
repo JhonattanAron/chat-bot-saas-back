@@ -1,19 +1,25 @@
-import { IsNotEmpty, IsString, IsUrl, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsUrl,
+  IsNotEmpty,
+  ValidateNested,
+} from "class-validator";
+
+import { Type } from "class-transformer";
+import { ClientContextDto } from "./context-web-chat.dto";
 
 export class ValidateClientKeyDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   clientKey: string;
 
-  @IsNotEmpty()
-  @IsString()
-  domain: string;
-
   @IsOptional()
   @IsString()
-  userAgent?: string;
+  widgetSessionId?: string;
 
-  @IsOptional()
-  @IsString()
-  ipAddress?: string;
+  @ValidateNested()
+  @Type(() => ClientContextDto)
+  context: ClientContextDto;
 }

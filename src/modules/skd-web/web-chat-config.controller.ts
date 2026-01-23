@@ -162,6 +162,7 @@ export class WebChatConfigController {
       assistantId: config.assistantId?.toString(),
       apiKeyId: config.apiKeyId?.toString(),
       domain: config.domain,
+      origin: config.origin, // <-- AGREGAR ESTO
       status: config.status,
       usageCount: config.usageCount,
       firstUsedAt: config.firstUsedAt?.toISOString(),

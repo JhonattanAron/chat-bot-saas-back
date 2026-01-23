@@ -1,31 +1,31 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type WebChatConfigDocument = WebChatConfig & Document;
 
 export enum ClientKeyStatus {
-  PENDING = 'pending',
-  WAITING_APPROVAL = 'waiting_approval',
-  APPROVED = 'approved',
-  BLOCKED = 'blocked',
+  PENDING = "pending",
+  WAITING_APPROVAL = "waiting_approval",
+  APPROVED = "approved",
+  BLOCKED = "blocked",
 }
 
-@Schema({ timestamps: true, collection: 'web_chat_configs' })
+@Schema({ timestamps: true, collection: "web_chat_configs" })
 export class WebChatConfig {
   @Prop({ required: true, unique: true, index: true })
   clientKey: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true, index: true })
   userId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Assistant', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "Assistant", required: true, index: true })
   assistantId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'ApiKey' })
+  @Prop({ type: Types.ObjectId, ref: "ApiKey" })
   apiKeyId?: Types.ObjectId;
 
   @Prop({ trim: true })
-  domain?: string;
+  domain: string;
 
   @Prop({
     type: String,
@@ -46,6 +46,8 @@ export class WebChatConfig {
 
   @Prop({ type: Object })
   metadata?: Record<string, any>;
+  @Prop({ required: false })
+  origin: string;
 
   // Virtual field for createdAt from timestamps
   createdAt?: Date;
