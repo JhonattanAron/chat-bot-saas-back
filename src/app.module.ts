@@ -19,6 +19,7 @@ import { BatchesModule } from "./modules/batches/batches.module";
 import { SystemModule } from "./modules/system/system.module";
 import { MailModule } from "./modules/ai-emails/mail.module";
 import { CampaignsModule } from "./modules/automated-tasks/campaign-automated/campaign-automated.module";
+import { WebChatConfigModule } from "./modules/skd-web/web-chat-config.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CampaignsModule } from "./modules/automated-tasks/campaign-automated/ca
     ApiKeyValidateModule,
     DashboardModule,
     TelegramChatModule,
+    WebChatConfigModule,
     PlansModule,
     MailModule,
     BatchesModule,
