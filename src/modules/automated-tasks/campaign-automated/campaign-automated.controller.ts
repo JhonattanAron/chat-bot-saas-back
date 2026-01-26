@@ -39,8 +39,10 @@ export class CampaignAutomatedController {
 
   // 📊 CONSULTAR ESTADO (para el bot)
   @Get("email/:id/status")
-  async getCampaignStatus(@Param("id") campaignId: string) {
-    const campaign = await this.campaignModel.findById(campaignId).lean();
+  async getCampaignStatus(@Param("id") user_id: string) {
+    const campaign = await this.campaignModel
+      .findOne({ userId: user_id })
+      .lean();
 
     if (!campaign) {
       throw new NotFoundException("Campaign no encontrada");
