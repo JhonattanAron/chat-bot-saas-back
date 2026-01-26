@@ -73,7 +73,7 @@ export class BatchesService {
 
     try {
       // Buscar en Google
-      const results = await this.googleService.search(searchQuery, 10);
+      const results = await this.googleService.search(searchQuery, 100);
 
       if (!results || results.length === 0) {
         await this.batchModel.findByIdAndUpdate(batch._id, {
