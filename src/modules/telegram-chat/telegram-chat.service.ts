@@ -124,43 +124,48 @@ export class TelegramChatService {
         response: firstPrediction.output,
         input_tokens,
         output_tokens,
+        funcionesEjecutadas: [],
       };
     }
 
     /** ========= EJECUCIÓN DE FUNCIÓN ========= */
     let functionResult: any;
+    const funcionesEjecutadas: string[] = [];
+    const functionName = functionCall.functionName;
+    const parameters = functionCall.parameters || [];
 
     try {
-      const functionName = functionCall.functionName;
-
       if (functionName === "IMPORTANT_INFO") {
-        // Para IMPORTANT_INFO registramos pero también mostramos al usuario
         functionResult = {
           name: functionName,
-          parameters: functionCall.parameters,
+          parameters: parameters,
+          result: null,
         };
+        funcionesEjecutadas.push(`[IMPORTANT_INFO:${parameters.join(", ")}]`);
       } else {
         const apiResult = await this.customFunctionService.executeFunction(
           functionName,
-          functionCall.parameters,
+          parameters,
           userId,
           assistantId,
         );
         functionResult = {
           name: functionName,
-          parameters: functionCall.parameters,
+          parameters: parameters,
           result: apiResult,
         };
+        funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
       }
     } catch (err: any) {
       functionResult = {
-        name: functionCall.functionName,
-        parameters: functionCall.parameters,
+        name: functionName,
+        parameters: parameters,
         error: {
           message: err?.message || "Error desconocido",
           stack: err?.stack || "",
         },
       };
+      funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
     }
 
     /** ========= SEGUNDO PROMPT: OBLIGAMOS AL MODELO A RESPONDER LEGIBLE ========= */
@@ -171,13 +176,11 @@ export class TelegramChatService {
       userMessage,
       availableFunctions,
       [functionResult],
-      // Pequeño prompt extra: obliga a que el modelo devuelva un mensaje legible
     );
 
-    // Forzamos al modelo a resumir / legibilizar resultados de función
     const forcedReadablePrompt = `${secondPrompt}
-  
-El usuario necesita una respuesta clara y legible basada en los resultados de la función. 
+
+El usuario necesita una respuesta clara y legible basada en los resultados de la función.
 Si la función devolvió datos de campañas, presenta un resumen amigable, con número de campañas, estado, emails encontrados y errores, sin mostrar JSON crudo.`;
 
     const secondPrediction =
@@ -185,11 +188,6 @@ Si la función devolvió datos de campañas, presenta un resumen amigable, con n
 
     input_tokens += secondPrediction.input_tokens || 0;
     output_tokens += secondPrediction.output_tokens || 0;
-
-    // Construimos las funciones ejecutadas
-    const funcionesEjecutadas = functionCall
-      ? [`[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`]
-      : [];
 
     return {
       response: secondPrediction.output,
