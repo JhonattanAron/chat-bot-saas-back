@@ -34,13 +34,13 @@ export class TelegramChatService {
     private readonly productSearchService: ProductsService,
     private readonly userService: UsersService,
     private readonly faqsService: FaqsService,
-    private readonly customFunctionService: CustomFunctionService
+    private readonly customFunctionService: CustomFunctionService,
   ) {}
 
   async connectBot(
     token: string,
     userId: string,
-    assistantId: string
+    assistantId: string,
   ): Promise<TelegramBotDocument> {
     try {
       // Validar el token con Telegram API
@@ -77,7 +77,7 @@ export class TelegramChatService {
       });
 
       this.logger.log(
-        `Bot connected: ${webhook} ${botInfo.username} (${botInfo.id})`
+        `Bot connected: ${webhook} ${botInfo.username} (${botInfo.id})`,
       );
       return savedBot;
     } catch (error) {
@@ -89,11 +89,11 @@ export class TelegramChatService {
     userId: string,
     assistantId: string,
     userMessage: string,
-    memoryContext: string
+    memoryContext: string,
   ) {
     const context = await this.userService.getAssistantById(
       assistantId,
-      userId
+      userId,
     );
     if (!context) throw new Error("Assistant not found");
 
@@ -106,7 +106,7 @@ export class TelegramChatService {
       context.description,
       memoryContext,
       userMessage,
-      availableFunctions
+      availableFunctions,
     );
 
     const firstPrediction = await this.predictionService.predict(firstPrompt);
@@ -115,7 +115,7 @@ export class TelegramChatService {
     let output_tokens = firstPrediction.output_tokens || 0;
 
     const functionCall = this.customFunctionService.parseFunctionCall(
-      firstPrediction.output
+      firstPrediction.output,
     );
 
     // ✅ No función → respuesta directa
@@ -129,13 +129,13 @@ export class TelegramChatService {
 
     // 🚀 Ejecutar función
     const functionResult = !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(
-      functionCall.functionName
+      functionCall.functionName,
     )
       ? await this.customFunctionService.executeFunction(
           functionCall.functionName,
           functionCall.parameters,
           userId,
-          assistantId
+          assistantId,
         )
       : null;
 
@@ -146,7 +146,7 @@ export class TelegramChatService {
       memoryContext,
       userMessage,
       availableFunctions,
-      functionResult ? [functionResult] : []
+      functionResult ? [functionResult] : [],
     );
 
     const secondPrediction = await this.predictionService.predict(secondPrompt);
@@ -161,7 +161,7 @@ export class TelegramChatService {
       funcionesEjecutadas: functionResult
         ? [
             `[${functionCall.functionName}:${functionCall.parameters.join(
-              ", "
+              ", ",
             )}]`,
           ]
         : [],
@@ -207,7 +207,7 @@ export class TelegramChatService {
   async sendMessageWithBot(
     botId: string,
     chatId: string,
-    message: string
+    message: string,
   ): Promise<any> {
     const client = this.telegramClients.get(botId);
     if (!client) {
@@ -234,7 +234,7 @@ export class TelegramChatService {
   }
 
   private async findBotByToken(
-    token: string
+    token: string,
   ): Promise<TelegramBotDocument | null> {
     return this.telegramBotModel.findOne({ token, isActive: true });
   }
@@ -248,7 +248,7 @@ export class TelegramChatService {
     username?: string,
     firstName?: string,
     lastName?: string,
-    messageId?: number
+    messageId?: number,
   ) {
     const existingChat = await this.telegramChatModel.findOne({
       telegramChatId,
@@ -260,7 +260,7 @@ export class TelegramChatService {
         assistantId,
         "user",
         message,
-        messageId
+        messageId,
       );
     }
 
@@ -268,7 +268,7 @@ export class TelegramChatService {
       userId,
       assistantId,
       message,
-      ""
+      "",
     );
 
     const cleanedResponse = this.cleanModelResponse(result.response);
@@ -296,7 +296,7 @@ export class TelegramChatService {
           createdAt: new Date(),
           important_info: this.buildCompleteImportantInfo(
             importantInfo,
-            result.funcionesEjecutadas || []
+            result.funcionesEjecutadas || [],
           ),
           messageType: "text",
         },
@@ -314,7 +314,7 @@ export class TelegramChatService {
     assistantId: string,
     role: "user" | "assistant",
     content: string,
-    messageId?: number
+    messageId?: number,
   ) {
     const chat = await this.telegramChatModel.findById(chatId);
     if (!chat) throw new Error("Chat not found");
@@ -334,7 +334,7 @@ export class TelegramChatService {
           },
         },
         $set: { lastActivityAt: new Date() },
-      }
+      },
     );
 
     const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
@@ -343,7 +343,7 @@ export class TelegramChatService {
       chat.userId,
       assistantId,
       content,
-      memoryContext
+      memoryContext,
     );
 
     const cleanedResponse = this.cleanModelResponse(result.response);
@@ -359,7 +359,7 @@ export class TelegramChatService {
             createdAt: new Date(),
             important_info: this.buildCompleteImportantInfo(
               importantInfo,
-              result.funcionesEjecutadas || []
+              result.funcionesEjecutadas || [],
             ),
             messageType: "text",
           },
@@ -368,7 +368,7 @@ export class TelegramChatService {
           input_tokens: result.input_tokens,
           output_tokens: result.output_tokens,
         },
-      }
+      },
     );
 
     return this.telegramChatModel.findById(chatId);
@@ -393,36 +393,35 @@ export class TelegramChatService {
   }
 
   async handleTelegramWebhook(webhookData: any, botToken: string) {
+    let telegramChatId: string | undefined;
+
     try {
-      this.logger.log(
-        "Received Telegram webhook:",
-        JSON.stringify(webhookData, null, 2)
-      );
-      console.log(botToken);
-
-      // Buscar el bot por token
       const bot = await this.findBotByToken(botToken);
-      if (!bot) {
-        this.logger.error(`No bot found for token`);
-        return { success: false, error: "Bot not found" };
-      }
+      if (!bot) return { success: false };
 
-      // Verificar si es un mensaje entrante
-      if (webhookData.message) {
-        const message = webhookData.message;
-        const from = message.from;
+      if (!webhookData.message) return { success: true };
 
-        const telegramChatId = message.chat.id.toString();
-        const telegramUserId = from.id.toString();
-        const messageContent =
-          message.text || message.caption || "Multimedia message";
-        const messageId = message.message_id;
-        const messageType = this.getTelegramMessageType(message);
-        const username = from.username || "";
-        const firstName = from.first_name || "";
-        const lastName = from.last_name || "";
+      const message = webhookData.message;
+      const from = message.from;
 
-        // Crear o actualizar el chat usando la info del bot
+      telegramChatId = message.chat.id.toString();
+
+      const telegramUserId = from.id.toString();
+      const messageContent =
+        message.text || message.caption || "Mensaje no soportado";
+      const messageId = message.message_id;
+      const username = from.username || "";
+      const firstName = from.first_name || "";
+      const lastName = from.last_name || "";
+
+      let responseText =
+        "❌ Ocurrió un error. Se reinició la conversación, intenta nuevamente.";
+
+      try {
+        if (!telegramChatId) {
+          return { success: false };
+        }
+
         const chat = await this.createTelegramChat(
           bot.userId,
           bot.assistantId,
@@ -432,35 +431,41 @@ export class TelegramChatService {
           username,
           firstName,
           lastName,
-          messageId
+          messageId,
         );
 
-        // Enviar respuesta a Telegram
-        if (!chat) {
-          return { error: "Failed to create or update chat" };
+        if (chat?.messages?.length) {
+          const lastMessage = chat.messages.at(-1);
+          if (lastMessage?.role === "assistant" && lastMessage.content) {
+            responseText = lastMessage.content;
+          }
         }
-        const lastMessage = chat.messages[chat.messages.length - 1];
-        if (lastMessage.role === "assistant") {
-          await this.sendTelegramMessage(
-            bot.token,
-            telegramChatId,
-            lastMessage.content
-          );
+      } catch (agentError) {
+        this.logger.error("AI agent error → limpiando chat", agentError);
+
+        if (telegramChatId) {
+          await this.deleteTelegramChatByTelegramId(telegramChatId);
         }
-
-        // Actualizar última actividad del bot
-        await this.telegramBotModel.updateOne(
-          { _id: bot._id },
-          { lastActivityAt: new Date() }
-        );
-
-        return { success: true, chatId: chat._id };
       }
 
-      return { success: true, message: "Webhook processed" };
-    } catch (error) {
-      this.logger.error("Error processing Telegram webhook:", error);
-      return { success: false, error: error.message };
+      if (telegramChatId) {
+        await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
+      }
+
+      await this.telegramBotModel.updateOne(
+        { _id: bot._id },
+        { lastActivityAt: new Date() },
+      );
+
+      return { success: true };
+    } catch (fatalError) {
+      this.logger.error("Fatal webhook error:", fatalError);
+
+      if (telegramChatId) {
+        await this.deleteTelegramChatByTelegramId(telegramChatId);
+      }
+
+      return { success: false };
     }
   }
 
@@ -482,7 +487,7 @@ export class TelegramChatService {
   private async processModelResponse(
     response: string,
     userId: string,
-    assistantId: string
+    assistantId: string,
   ) {
     let faqInfo = "";
     let productosString = "";
@@ -497,7 +502,7 @@ export class TelegramChatService {
       const faqResults = await this.faqsService.search(
         faqQuery,
         userId,
-        assistantId
+        assistantId,
       );
       if (faqResults && faqResults.length > 0) {
         faqInfo = faqResults[0].answer;
@@ -513,7 +518,7 @@ export class TelegramChatService {
       funcionesEjecutadas.push(`[SEARCH:${searchTerm}]`);
       const relatedProducts = await this.productSearchService.search(
         searchTerm,
-        userId
+        userId,
       );
       if (relatedProducts.length === 0) {
         productosString = "No se encontraron productos con ese término.";
@@ -532,11 +537,11 @@ export class TelegramChatService {
           functionCall.functionName,
           functionCall.parameters,
           userId,
-          assistantId
+          assistantId,
         );
         functionResults.push(functionResult);
         funcionesEjecutadas.push(
-          `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`
+          `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`,
         );
       }
     }
@@ -569,7 +574,7 @@ export class TelegramChatService {
 
   private buildCompleteImportantInfo(
     importantInfo: string,
-    funcionesEjecutadas: string[]
+    funcionesEjecutadas: string[],
   ): string {
     const funcionesStr = funcionesEjecutadas.length
       ? ` [FUNCIONES_EJECUTADAS: ${funcionesEjecutadas.join(" ")}]`
@@ -588,7 +593,7 @@ export class TelegramChatService {
       .filter(
         (msg) =>
           msg.role === "assistant" ||
-          (msg.role === "user" && messages.indexOf(msg) > messages.length - 5)
+          (msg.role === "user" && messages.indexOf(msg) > messages.length - 5),
       )
       .slice(-4);
 
@@ -609,21 +614,21 @@ export class TelegramChatService {
         let functionsUsed = "";
 
         const mainInfoMatch = assistantImportantInfo.match(
-          /\[IMPORTANT_INFO: ([^[]+)/
+          /\[IMPORTANT_INFO: ([^[]+)/,
         );
         if (mainInfoMatch && mainInfoMatch[1].trim() !== "lo_que_necesita") {
           mainInfo = mainInfoMatch[1].trim();
         }
 
         const functionsMatch = assistantImportantInfo.match(
-          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/
+          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/,
         );
         if (functionsMatch) {
           functionsUsed = functionsMatch[1];
         }
 
         memoryParts.push(
-          `Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo || "información general"} | Funciones usadas: ${functionsUsed || "ninguna"}`
+          `Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo || "información general"} | Funciones usadas: ${functionsUsed || "ninguna"}`,
         );
       }
     }
@@ -636,7 +641,7 @@ export class TelegramChatService {
   private async sendTelegramMessage(
     botToken: string,
     chatId: string,
-    message: string
+    message: string,
   ) {
     // Implementar envío de mensaje a Telegram Bot API
     try {
@@ -659,6 +664,17 @@ export class TelegramChatService {
     } catch (error) {
       this.logger.error(`Error sending Telegram message:`, error);
       throw error;
+    }
+  }
+
+  private async deleteTelegramChatByTelegramId(telegramChatId: string) {
+    try {
+      await this.telegramChatModel.deleteOne({ telegramChatId });
+      this.logger.warn(
+        `Telegram chat ${telegramChatId} eliminado por error crítico`,
+      );
+    } catch (err) {
+      this.logger.error(`Error eliminando chat ${telegramChatId}:`, err);
     }
   }
 }
