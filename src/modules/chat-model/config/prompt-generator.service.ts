@@ -8,7 +8,7 @@ export class PromptGeneratorService {
     memoryContext: string,
     userMessage: string,
     availableFunctions: any[],
-    functionResults?: any[]
+    functionResults?: any[],
   ): string {
     const functionsDescription =
       this.formatFunctionsForPrompt(availableFunctions);
@@ -18,7 +18,7 @@ export class PromptGeneratorService {
           .map((r) =>
             r.success
               ? `✔ ${r.executedFunction}: ${JSON.stringify(r.result)}`
-              : `✖ ${r.executedFunction}: ${r.error}`
+              : `✖ ${r.executedFunction}: ${r.error}`,
           )
           .join("\n")
       : "NINGUNA";
@@ -49,9 +49,9 @@ INSTRUCCIONES CRÍTICAS:
 [FUNCION:parámetros]
 
 2️⃣ Si llamas una función:
-- NO respondas al usuario aún
-- SOLO devuelve el llamado de función y:
-  [IMPORTANT_INFO:descripción clara de la intención]
+- Si la función es **IMPORTANT_INFO**, el asistente **siempre debe generar una respuesta legible** basada en la intención, incluso si no hay datos previos.
+- Para todas las demás funciones que devuelven datos externos, **NO respondas al usuario aún**. Espera a que la función termine y usa sus resultados para generar la respuesta.
+- Siempre termina con: [IMPORTANT_INFO:descripción clara de la intención]
 
 3️⃣ Si YA existen resultados de funciones:
 - Usa esos resultados
@@ -65,7 +65,10 @@ INSTRUCCIONES CRÍTICAS:
 ⚠️ Usa SOLO los formatos indicados.
 
 ====================
-RESPUESTA:
+RESPUESTA OBLIGATORIA:
+⚠️ EL MODELO DEBE GENERAR UNA RESPUESTA LEGIBLE **si la función es IMPORTANT_INFO**, aunque no haya resultados previos.
+⚠️ Para otras funciones, espera a los resultados antes de responder.
+[IMPORTANT_INFO:respuesta generada]
 `;
   }
 
