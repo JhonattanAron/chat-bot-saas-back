@@ -100,7 +100,7 @@ export class TelegramChatService {
     const availableFunctions =
       await this.customFunctionService.getFunctionsList(userId, assistantId);
 
-    /** ========= PRIMER PROMPT ========= */
+    // 🧠 PROMPT ÚNICO
     const firstPrompt = this.promptGen.generateUnifiedPrompt(
       context.name,
       context.description,
@@ -118,90 +118,38 @@ export class TelegramChatService {
       firstPrediction.output,
     );
 
-    /** ========= RESPUESTA NORMAL ========= */
+    // ✅ No función → respuesta directa
     if (!functionCall) {
       return {
         response: firstPrediction.output,
         input_tokens,
         output_tokens,
-        funcionesEjecutadas: [],
       };
     }
 
-    /** ========= EJECUCIÓN DE FUNCIÓN ========= */
-    let functionResult: any;
-    const funcionesEjecutadas: string[] = [];
-    const functionName = functionCall.functionName;
-    const parameters = functionCall.parameters || [];
+    // 🚀 Ejecutar función
+    const functionResult = !["SEARCH", "FAQ", "IMPORTANT_INFO"].includes(
+      functionCall.functionName,
+    )
+      ? await this.customFunctionService.executeFunction(
+          functionCall.functionName,
+          functionCall.parameters,
+          userId,
+          assistantId,
+        )
+      : null;
 
-    try {
-      try {
-        // Ejecuta la función, pero NUNCA bloquear la respuesta
-        let apiResult: any;
-        if (functionName === "IMPORTANT_INFO") {
-          apiResult =
-            "Información importante generada automáticamente para el usuario"; // <-- siempre tiene valor
-        } else {
-          try {
-            apiResult = await this.customFunctionService.executeFunction(
-              functionName,
-              parameters,
-              userId,
-              assistantId,
-            );
-          } catch (err) {
-            apiResult = `Ocurrió un error al ejecutar ${functionName}, pero seguimos respondiendo.`;
-          }
-        }
-
-        functionResult = {
-          name: functionName,
-          parameters: parameters,
-          result: apiResult,
-        };
-
-        funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
-      } catch (err: any) {
-        // Fallback: nunca dejar sin respuesta
-        functionResult = {
-          name: functionName,
-          parameters: parameters,
-          result: `Ocurrió un error desconocido, pero te respondo igual.`,
-          error: err?.message || "",
-        };
-        funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
-      }
-    } catch (err: any) {
-      functionResult = {
-        name: functionName,
-        parameters: parameters,
-        error: {
-          message: err?.message || "Error desconocido",
-          stack: err?.stack || "",
-        },
-      };
-      funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
-    }
-
-    /** ========= SEGUNDO PROMPT: OBLIGAMOS AL MODELO A RESPONDER LEGIBLE ========= */
+    // 🧠 SEGUNDA PASADA
     const secondPrompt = this.promptGen.generateUnifiedPrompt(
       context.name,
       context.description,
       memoryContext,
       userMessage,
       availableFunctions,
-      [functionResult],
+      functionResult ? [functionResult] : [],
     );
 
-    const forcedReadablePrompt = `${secondPrompt}
-
-⚠️ IMPORTANTE: El modelo debe **generar siempre una respuesta legible**.
-No importa si la función no devuelve datos o falla, el usuario siempre recibe un mensaje claro y útil.
-Resumen amigable sin mostrar JSON crudo:
-`;
-
-    const secondPrediction =
-      await this.predictionService.predict(forcedReadablePrompt);
+    const secondPrediction = await this.predictionService.predict(secondPrompt);
 
     input_tokens += secondPrediction.input_tokens || 0;
     output_tokens += secondPrediction.output_tokens || 0;
@@ -210,7 +158,13 @@ Resumen amigable sin mostrar JSON crudo:
       response: secondPrediction.output,
       input_tokens,
       output_tokens,
-      funcionesEjecutadas,
+      funcionesEjecutadas: functionResult
+        ? [
+            `[${functionCall.functionName}:${functionCall.parameters.join(
+              ", ",
+            )}]`,
+          ]
+        : [],
     };
   }
 
@@ -439,31 +393,36 @@ Resumen amigable sin mostrar JSON crudo:
   }
 
   async handleTelegramWebhook(webhookData: any, botToken: string) {
-    let telegramChatId: string | undefined;
-
     try {
+      this.logger.log(
+        "Received Telegram webhook:",
+        JSON.stringify(webhookData, null, 2),
+      );
+      console.log(botToken);
+
+      // Buscar el bot por token
       const bot = await this.findBotByToken(botToken);
-      if (!bot) return { success: false };
+      if (!bot) {
+        this.logger.error(`No bot found for token`);
+        return { success: false, error: "Bot not found" };
+      }
 
-      if (!webhookData.message) return { success: true };
+      // Verificar si es un mensaje entrante
+      if (webhookData.message) {
+        const message = webhookData.message;
+        const from = message.from;
 
-      const message = webhookData.message;
-      const from = message.from;
+        const telegramChatId = message.chat.id.toString();
+        const telegramUserId = from.id.toString();
+        const messageContent =
+          message.text || message.caption || "Multimedia message";
+        const messageId = message.message_id;
+        const messageType = this.getTelegramMessageType(message);
+        const username = from.username || "";
+        const firstName = from.first_name || "";
+        const lastName = from.last_name || "";
 
-      telegramChatId = message.chat.id.toString();
-      const telegramUserId = from.id.toString();
-      const messageContent =
-        message.text || message.caption || "Mensaje no soportado";
-      const messageId = message.message_id;
-      const username = from.username || "";
-      const firstName = from.first_name || "";
-      const lastName = from.last_name || "";
-
-      let responseText: string | null = null;
-
-      try {
-        if (!telegramChatId) return { success: false };
-
+        // Crear o actualizar el chat usando la info del bot
         const chat = await this.createTelegramChat(
           bot.userId,
           bot.assistantId,
@@ -476,51 +435,32 @@ Resumen amigable sin mostrar JSON crudo:
           messageId,
         );
 
-        if (chat?.messages?.length) {
-          const lastMessage = chat.messages.at(-1);
-          if (lastMessage?.role === "assistant" && lastMessage.content) {
-            responseText = lastMessage.content;
-          }
+        // Enviar respuesta a Telegram
+        if (!chat) {
+          return { error: "Failed to create or update chat" };
         }
-      } catch (agentError: any) {
-        this.logger.error("AI agent error → enviando al modelo", agentError);
+        const lastMessage = chat.messages[chat.messages.length - 1];
+        if (lastMessage.role === "assistant") {
+          await this.sendTelegramMessage(
+            bot.token,
+            telegramChatId,
+            lastMessage.content,
+          );
+        }
 
-        const errorPrompt = `
-Eres un asistente que debe explicar errores de forma clara al usuario.
+        // Actualizar última actividad del bot
+        await this.telegramBotModel.updateOne(
+          { _id: bot._id },
+          { lastActivityAt: new Date() },
+        );
 
-MENSAJE DEL USUARIO:
-"${messageContent}"
-
-ERROR DETECTADO:
-${agentError?.message || "Error desconocido"}
-
-INSTRUCCIONES:
-- Explica qué ocurrió
-- No digas que la conversación se reinició
-- Sugiere cómo continuar
-`;
-
-        const errorPrediction =
-          await this.predictionService.predict(errorPrompt);
-        responseText =
-          errorPrediction?.output ||
-          "Ocurrió un problema interno, puedes intentar nuevamente.";
+        return { success: true, chatId: chat._id };
       }
 
-      await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
-
-      await this.telegramBotModel.updateOne(
-        { _id: bot._id },
-        { lastActivityAt: new Date() },
-      );
-
-      return { success: true };
-    } catch (fatalError) {
-      this.logger.error("Fatal webhook error:", fatalError);
-      if (telegramChatId) {
-        await this.deleteTelegramChatByTelegramId(telegramChatId);
-      }
-      return { success: false };
+      return { success: true, message: "Webhook processed" };
+    } catch (error) {
+      this.logger.error("Error processing Telegram webhook:", error);
+      return { success: false, error: error.message };
     }
   }
 
@@ -634,9 +574,10 @@ INSTRUCCIONES:
     const funcionesStr = funcionesEjecutadas.length
       ? ` [FUNCIONES_EJECUTADAS: ${funcionesEjecutadas.join(" ")}]`
       : "";
-    const finalImportantInfoContent = importantInfo
-      ? importantInfo
-      : "Respuesta generada automáticamente"; // <-- nunca vacío
+    const finalImportantInfoContent =
+      importantInfo && importantInfo !== "lo_que_necesita"
+        ? importantInfo
+        : "información general";
 
     return `[IMPORTANT_INFO: ${finalImportantInfoContent}${funcionesStr}]`;
   }
@@ -692,56 +633,32 @@ INSTRUCCIONES:
       : "";
   }
 
-  private async sendTelegramMessage(botToken, chatId, message) {
+  private async sendTelegramMessage(
+    botToken: string,
+    chatId: string,
+    message: string,
+  ) {
+    // Implementar envío de mensaje a Telegram Bot API
     try {
-      // Log previo al envío
-      this.logger.log(
-        `➡️ Enviando mensaje a TelegramChatId: ${chatId}\nMensaje: ${message}`,
-      );
-
       const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: "HTML", // Puedes probar quitarlo si hay caracteres especiales
+          parse_mode: "HTML",
         }),
       });
 
       const result = await response.json();
-
-      // Log del resultado de Telegram
-      if (!result.ok) {
-        this.logger.error(
-          `❌ Error enviando mensaje a Telegram. Descripción: ${result.description}\nResultado completo: ${JSON.stringify(result)}`,
-        );
-        throw new Error(
-          result.description || "Error desconocido al enviar mensaje",
-        );
-      }
-
-      this.logger.log(`✅ Mensaje enviado correctamente a ${chatId}`);
+      this.logger.log(`Telegram message sent to ${chatId}:`, result);
       return result;
-    } catch (err: any) {
-      this.logger.error(
-        `💥 Exception enviando mensaje a Telegram: ${err.message}`,
-        err.stack,
-      );
-      throw err;
-    }
-  }
-
-  private async deleteTelegramChatByTelegramId(telegramChatId: string) {
-    try {
-      await this.telegramChatModel.deleteOne({ telegramChatId });
-      this.logger.warn(
-        `Telegram chat ${telegramChatId} eliminado por error crítico`,
-      );
-    } catch (err) {
-      this.logger.error(`Error eliminando chat ${telegramChatId}:`, err);
+    } catch (error) {
+      this.logger.error(`Error sending Telegram message:`, error);
+      throw error;
     }
   }
 }

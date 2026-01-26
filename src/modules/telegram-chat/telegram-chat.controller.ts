@@ -21,7 +21,7 @@ export class TelegramChatController {
       token: string;
       userId: string;
       assistantId: string;
-    }
+    },
   ) {
     const { token, userId, assistantId } = body;
     return this.telegramChatService.connectBot(token, userId, assistantId);
@@ -45,12 +45,12 @@ export class TelegramChatController {
   @Post(":botId/send")
   async sendMessageWithBot(
     @Param("botId") botId: string,
-    @Body() body: { chatId: string; message: string }
+    @Body() body: { chatId: string; message: string },
   ) {
     return this.telegramChatService.sendMessageWithBot(
       botId,
       body.chatId,
-      body.message
+      body.message,
     );
   }
 
@@ -63,7 +63,7 @@ export class TelegramChatController {
 
   @Get("telegram/:telegramChatId")
   async getTelegramChatByTelegramId(
-    @Param("telegramChatId") telegramChatId: string
+    @Param("telegramChatId") telegramChatId: string,
   ) {
     return this.telegramChatService.getTelegramChatByTelegramId(telegramChatId);
   }
