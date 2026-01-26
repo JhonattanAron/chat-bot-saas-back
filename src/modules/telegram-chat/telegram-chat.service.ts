@@ -129,34 +129,28 @@ export class TelegramChatService {
 
     /** ========= EJECUCIÓN DE FUNCIÓN ========= */
     let functionResult: any;
-    let responseToUser = ""; // Lo que se enviará al chat
 
     try {
       const functionName = functionCall.functionName;
 
       if (functionName === "IMPORTANT_INFO") {
-        // Para IMPORTANT_INFO solo registramos pero también mostramos al usuario
+        // Para IMPORTANT_INFO registramos pero también mostramos al usuario
         functionResult = {
           name: functionName,
           parameters: functionCall.parameters,
         };
-        responseToUser = functionCall.parameters.join(" ");
       } else {
-        // Funciones normales
         const apiResult = await this.customFunctionService.executeFunction(
           functionName,
           functionCall.parameters,
           userId,
           assistantId,
         );
-
         functionResult = {
           name: functionName,
           parameters: functionCall.parameters,
           result: apiResult,
         };
-        responseToUser =
-          typeof apiResult === "string" ? apiResult : JSON.stringify(apiResult);
       }
     } catch (err: any) {
       functionResult = {
@@ -167,10 +161,9 @@ export class TelegramChatService {
           stack: err?.stack || "",
         },
       };
-      responseToUser = "❌ Ocurrió un error al ejecutar la función.";
     }
 
-    /** ========= SEGUNDO PROMPT (CON RESULTADO O ERROR) ========= */
+    /** ========= SEGUNDO PROMPT: OBLIGAMOS AL MODELO A RESPONDER LEGIBLE ========= */
     const secondPrompt = this.promptGen.generateUnifiedPrompt(
       context.name,
       context.description,
@@ -178,20 +171,31 @@ export class TelegramChatService {
       userMessage,
       availableFunctions,
       [functionResult],
+      // Pequeño prompt extra: obliga a que el modelo devuelva un mensaje legible
     );
 
-    const secondPrediction = await this.predictionService.predict(secondPrompt);
+    // Forzamos al modelo a resumir / legibilizar resultados de función
+    const forcedReadablePrompt = `${secondPrompt}
+  
+El usuario necesita una respuesta clara y legible basada en los resultados de la función. 
+Si la función devolvió datos de campañas, presenta un resumen amigable, con número de campañas, estado, emails encontrados y errores, sin mostrar JSON crudo.`;
+
+    const secondPrediction =
+      await this.predictionService.predict(forcedReadablePrompt);
 
     input_tokens += secondPrediction.input_tokens || 0;
     output_tokens += secondPrediction.output_tokens || 0;
 
+    // Construimos las funciones ejecutadas
+    const funcionesEjecutadas = functionCall
+      ? [`[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`]
+      : [];
+
     return {
-      response: responseToUser || secondPrediction.output,
+      response: secondPrediction.output,
       input_tokens,
       output_tokens,
-      funcionesEjecutadas: [
-        `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`,
-      ],
+      funcionesEjecutadas,
     };
   }
 
