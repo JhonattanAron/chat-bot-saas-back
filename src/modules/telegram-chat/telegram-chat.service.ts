@@ -490,7 +490,7 @@ INSTRUCCIONES:
           "Ocurrió un problema interno, puedes intentar nuevamente.";
       }
 
-      if (telegramChatId && responseText) {
+      if (responseText && telegramChatId) {
         await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
       }
 
@@ -683,27 +683,44 @@ INSTRUCCIONES:
     chatId: string,
     message: string,
   ) {
-    // Implementar envío de mensaje a Telegram Bot API
     try {
+      // Log previo al envío
+      this.logger.log(
+        `➡️ Enviando mensaje a TelegramChatId: ${chatId}\nMensaje: ${message}`,
+      );
+
       const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: "HTML",
+          parse_mode: "HTML", // Puedes probar quitarlo si hay caracteres especiales
         }),
       });
 
       const result = await response.json();
-      this.logger.log(`Telegram message sent to ${chatId}:`, result);
+
+      // Log del resultado de Telegram
+      if (!result.ok) {
+        this.logger.error(
+          `❌ Error enviando mensaje a Telegram. Descripción: ${result.description}\nResultado completo: ${JSON.stringify(result)}`,
+        );
+        throw new Error(
+          result.description || "Error desconocido al enviar mensaje",
+        );
+      }
+
+      this.logger.log(`✅ Mensaje enviado correctamente a ${chatId}`);
       return result;
-    } catch (error) {
-      this.logger.error(`Error sending Telegram message:`, error);
-      throw error;
+    } catch (err: any) {
+      this.logger.error(
+        `💥 Exception enviando mensaje a Telegram: ${err.message}`,
+        err.stack,
+      );
+      throw err;
     }
   }
 
