@@ -129,24 +129,36 @@ export class TelegramChatService {
 
     /** ========= EJECUCIÓN DE FUNCIÓN ========= */
     let functionResult: any;
+    let responseToUser = ""; // Lo que se enviará al chat
 
     try {
-      const apiResult = await this.customFunctionService.executeFunction(
-        functionCall.functionName,
-        functionCall.parameters,
-        userId,
-        assistantId,
-      );
+      const functionName = functionCall.functionName;
 
-      functionResult = {
-        name: functionCall.functionName,
-        parameters: functionCall.parameters,
-        result: apiResult,
-      };
+      if (functionName === "IMPORTANT_INFO") {
+        // Para IMPORTANT_INFO solo registramos pero también mostramos al usuario
+        functionResult = {
+          name: functionName,
+          parameters: functionCall.parameters,
+        };
+        responseToUser = functionCall.parameters.join(" ");
+      } else {
+        // Funciones normales
+        const apiResult = await this.customFunctionService.executeFunction(
+          functionName,
+          functionCall.parameters,
+          userId,
+          assistantId,
+        );
+
+        functionResult = {
+          name: functionName,
+          parameters: functionCall.parameters,
+          result: apiResult,
+        };
+        responseToUser =
+          typeof apiResult === "string" ? apiResult : JSON.stringify(apiResult);
+      }
     } catch (err: any) {
-      // ⛔ NO lanzar error
-      // ⛔ NO borrar chat
-      // ✅ Pasar el error al modelo
       functionResult = {
         name: functionCall.functionName,
         parameters: functionCall.parameters,
@@ -155,6 +167,7 @@ export class TelegramChatService {
           stack: err?.stack || "",
         },
       };
+      responseToUser = "❌ Ocurrió un error al ejecutar la función.";
     }
 
     /** ========= SEGUNDO PROMPT (CON RESULTADO O ERROR) ========= */
@@ -173,7 +186,7 @@ export class TelegramChatService {
     output_tokens += secondPrediction.output_tokens || 0;
 
     return {
-      response: secondPrediction.output,
+      response: responseToUser || secondPrediction.output,
       input_tokens,
       output_tokens,
       funcionesEjecutadas: [
