@@ -135,24 +135,39 @@ export class TelegramChatService {
     const parameters = functionCall.parameters || [];
 
     try {
-      if (functionName === "IMPORTANT_INFO") {
-        functionResult = {
-          name: functionName,
-          parameters: parameters,
-          result: null,
-        };
-        funcionesEjecutadas.push(`[IMPORTANT_INFO:${parameters.join(", ")}]`);
-      } else {
-        const apiResult = await this.customFunctionService.executeFunction(
-          functionName,
-          parameters,
-          userId,
-          assistantId,
-        );
+      try {
+        // Ejecuta la función, pero NUNCA bloquear la respuesta
+        let apiResult: any;
+        if (functionName === "IMPORTANT_INFO") {
+          apiResult =
+            "Información importante generada automáticamente para el usuario"; // <-- siempre tiene valor
+        } else {
+          try {
+            apiResult = await this.customFunctionService.executeFunction(
+              functionName,
+              parameters,
+              userId,
+              assistantId,
+            );
+          } catch (err) {
+            apiResult = `Ocurrió un error al ejecutar ${functionName}, pero seguimos respondiendo.`;
+          }
+        }
+
         functionResult = {
           name: functionName,
           parameters: parameters,
           result: apiResult,
+        };
+
+        funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
+      } catch (err: any) {
+        // Fallback: nunca dejar sin respuesta
+        functionResult = {
+          name: functionName,
+          parameters: parameters,
+          result: `Ocurrió un error desconocido, pero te respondo igual.`,
+          error: err?.message || "",
         };
         funcionesEjecutadas.push(`[${functionName}:${parameters.join(", ")}]`);
       }
@@ -180,8 +195,10 @@ export class TelegramChatService {
 
     const forcedReadablePrompt = `${secondPrompt}
 
-El usuario necesita una respuesta clara y legible basada en los resultados de la función.
-Si la función devolvió datos de campañas, presenta un resumen amigable, con número de campañas, estado, emails encontrados y errores, sin mostrar JSON crudo.`;
+⚠️ IMPORTANTE: El modelo debe **generar siempre una respuesta legible**.
+No importa si la función no devuelve datos o falla, el usuario siempre recibe un mensaje claro y útil.
+Resumen amigable sin mostrar JSON crudo:
+`;
 
     const secondPrediction =
       await this.predictionService.predict(forcedReadablePrompt);
@@ -617,10 +634,9 @@ INSTRUCCIONES:
     const funcionesStr = funcionesEjecutadas.length
       ? ` [FUNCIONES_EJECUTADAS: ${funcionesEjecutadas.join(" ")}]`
       : "";
-    const finalImportantInfoContent =
-      importantInfo && importantInfo !== "lo_que_necesita"
-        ? importantInfo
-        : "información general";
+    const finalImportantInfoContent = importantInfo
+      ? importantInfo
+      : "Respuesta generada automáticamente"; // <-- nunca vacío
 
     return `[IMPORTANT_INFO: ${finalImportantInfoContent}${funcionesStr}]`;
   }
