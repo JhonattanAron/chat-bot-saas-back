@@ -40,15 +40,13 @@ export class CampaignAutomatedController {
   // 📊 CONSULTAR ESTADO (para el bot)
   @Get("email/:id/status")
   async getCampaignStatus(@Param("id") user_id: string) {
-    const campaign = await this.campaignModel
-      .findOne({ userId: user_id })
-      .lean();
+    const campaigns = await this.campaignModel.find({ userId: user_id }).lean();
 
-    if (!campaign) {
-      throw new NotFoundException("Campaign no encontrada");
+    if (!campaigns || campaigns.length === 0) {
+      throw new NotFoundException("Campaigns no encontradas");
     }
 
-    return {
+    return campaigns.map((campaign) => ({
       id: campaign._id,
       status: campaign.status,
       scraping_exitoso: campaign.scraping_exitoso,
@@ -59,6 +57,6 @@ export class CampaignAutomatedController {
       emails_enviados: campaign.emails_enviados,
       error: campaign.error ?? null,
       updatedAt: campaign.updatedAt,
-    };
+    }));
   }
 }
