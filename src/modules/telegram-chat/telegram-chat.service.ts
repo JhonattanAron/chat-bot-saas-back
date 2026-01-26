@@ -419,7 +419,6 @@ export class TelegramChatService {
       const from = message.from;
 
       telegramChatId = message.chat.id.toString();
-
       const telegramUserId = from.id.toString();
       const messageContent =
         message.text || message.caption || "Mensaje no soportado";
@@ -428,13 +427,10 @@ export class TelegramChatService {
       const firstName = from.first_name || "";
       const lastName = from.last_name || "";
 
-      let responseText =
-        "❌ Ocurrió un error. Se reinició la conversación, intenta nuevamente.";
+      let responseText: string | null = null;
 
       try {
-        if (!telegramChatId) {
-          return { success: false };
-        }
+        if (!telegramChatId) return { success: false };
 
         const chat = await this.createTelegramChat(
           bot.userId,
@@ -454,15 +450,32 @@ export class TelegramChatService {
             responseText = lastMessage.content;
           }
         }
-      } catch (agentError) {
-        this.logger.error("AI agent error → limpiando chat", agentError);
+      } catch (agentError: any) {
+        this.logger.error("AI agent error → enviando al modelo", agentError);
 
-        if (telegramChatId) {
-          await this.deleteTelegramChatByTelegramId(telegramChatId);
-        }
+        const errorPrompt = `
+Eres un asistente que debe explicar errores de forma clara al usuario.
+
+MENSAJE DEL USUARIO:
+"${messageContent}"
+
+ERROR DETECTADO:
+${agentError?.message || "Error desconocido"}
+
+INSTRUCCIONES:
+- Explica qué ocurrió
+- No digas que la conversación se reinició
+- Sugiere cómo continuar
+`;
+
+        const errorPrediction =
+          await this.predictionService.predict(errorPrompt);
+        responseText =
+          errorPrediction?.output ||
+          "Ocurrió un problema interno, puedes intentar nuevamente.";
       }
 
-      if (telegramChatId) {
+      if (telegramChatId && responseText) {
         await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
       }
 
@@ -474,11 +487,9 @@ export class TelegramChatService {
       return { success: true };
     } catch (fatalError) {
       this.logger.error("Fatal webhook error:", fatalError);
-
       if (telegramChatId) {
         await this.deleteTelegramChatByTelegramId(telegramChatId);
       }
-
       return { success: false };
     }
   }
