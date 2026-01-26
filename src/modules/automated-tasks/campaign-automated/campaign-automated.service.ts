@@ -21,7 +21,8 @@ export class CampaignsAutomatedService {
 
     // 1️⃣ Crear batch
     const batch = await this.batchesService.createBatch(userId, searchQuery);
-    if (!batch?._id) throw new Error("No se pudo crear el batch");
+    if (!batch?._id || batch.total_urls === 0)
+      throw new Error("No se pudo crear el batch o el batch tiene 0 URLs");
     const batchId = batch._id.toString();
 
     // 2️⃣ Crear campaña

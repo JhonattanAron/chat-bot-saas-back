@@ -39,20 +39,6 @@ export class MailTemplateService {
               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             "
           >
-            <!-- HEADER FIJO -->
-            <tr>
-              <td
-                align="center"
-                style="background-color: #333333; padding: 24px"
-              >
-                <img
-                  src="https://i.imgur.com/0oINgk3.png"
-                  alt="Digital Prime Solutions"
-                  width="100"
-                />
-              </td>
-            </tr>
-
             <!-- CONTENIDO DINÁMICO -->
             <tr>
               <td style="padding: 26px; color: #333333">
@@ -202,7 +188,7 @@ El correo debe incluir:
 Usa únicamente etiquetas HTML compatibles con email:
 <h1>, <h2>, <p>, <ul>, <li>, <strong>
 
-Genera SOLO el HTML final del correo puedes agregar emojis negrita para que sea mas amigable, sin explicaciones ni texto adicional.
+Genera SOLO el HTML no etiquetas adicionales solo html puro nada mas final del correo puedes agregar emojis negrita para que sea mas amigable, sin explicaciones ni texto adicional.
 `;
 
     return prompt;
