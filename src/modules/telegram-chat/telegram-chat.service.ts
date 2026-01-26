@@ -337,13 +337,11 @@ export class TelegramChatService {
       },
     );
 
-    const memoryContext = this.buildEnhancedMemoryContext(chat.messages);
-
     const result = await this.runTelegramAgent(
       chat.userId,
       assistantId,
       content,
-      memoryContext,
+      "",
     );
 
     const cleanedResponse = this.cleanModelResponse(result.response);
@@ -580,57 +578,6 @@ export class TelegramChatService {
         : "información general";
 
     return `[IMPORTANT_INFO: ${finalImportantInfoContent}${funcionesStr}]`;
-  }
-
-  private buildEnhancedMemoryContext(messages: any[]): string {
-    const memoryParts: string[] = [];
-    const recentMessages = messages
-      .filter(
-        (msg) =>
-          msg.role === "assistant" ||
-          (msg.role === "user" && messages.indexOf(msg) > messages.length - 5),
-      )
-      .slice(-4);
-
-    for (let i = 0; i < recentMessages.length; i += 2) {
-      const userMsg = recentMessages[i];
-      const assistantMsg = recentMessages[i + 1];
-
-      if (
-        userMsg &&
-        assistantMsg &&
-        userMsg.role === "user" &&
-        assistantMsg.role === "assistant"
-      ) {
-        const userContent = userMsg.content || "";
-        const assistantImportantInfo = assistantMsg.important_info || "";
-
-        let mainInfo = "";
-        let functionsUsed = "";
-
-        const mainInfoMatch = assistantImportantInfo.match(
-          /\[IMPORTANT_INFO: ([^[]+)/,
-        );
-        if (mainInfoMatch && mainInfoMatch[1].trim() !== "lo_que_necesita") {
-          mainInfo = mainInfoMatch[1].trim();
-        }
-
-        const functionsMatch = assistantImportantInfo.match(
-          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/,
-        );
-        if (functionsMatch) {
-          functionsUsed = functionsMatch[1];
-        }
-
-        memoryParts.push(
-          `Usuario preguntó: "${userContent}" | Asistente respondió sobre: ${mainInfo || "información general"} | Funciones usadas: ${functionsUsed || "ninguna"}`,
-        );
-      }
-    }
-
-    return memoryParts.length > 0
-      ? `CONVERSACIÓN PREVIA: ${memoryParts.join(" || ")}`
-      : "";
   }
 
   private async sendTelegramMessage(

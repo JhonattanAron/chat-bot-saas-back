@@ -5,8 +5,8 @@ export class PromptGeneratorService {
   generateUnifiedPrompt(
     assistantName: string,
     assistantDescription: string,
-    memoryContext: string,
     userMessage: string,
+    memoryContext: string,
     availableFunctions: any[],
     functionResults?: any[],
   ): string {
