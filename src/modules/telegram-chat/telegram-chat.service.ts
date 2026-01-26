@@ -490,9 +490,7 @@ INSTRUCCIONES:
           "Ocurrió un problema interno, puedes intentar nuevamente.";
       }
 
-      if (responseText && telegramChatId) {
-        await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
-      }
+      await this.sendTelegramMessage(bot.token, telegramChatId, responseText);
 
       await this.telegramBotModel.updateOne(
         { _id: bot._id },
@@ -678,11 +676,7 @@ INSTRUCCIONES:
       : "";
   }
 
-  private async sendTelegramMessage(
-    botToken: string,
-    chatId: string,
-    message: string,
-  ) {
+  private async sendTelegramMessage(botToken, chatId, message) {
     try {
       // Log previo al envío
       this.logger.log(
