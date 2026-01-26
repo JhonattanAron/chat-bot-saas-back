@@ -90,128 +90,96 @@ export class TelegramChatService {
     assistantId: string,
     userMessage: string,
     memoryContext: string,
-  ): Promise<{
-    response: string;
-    input_tokens: number;
-    output_tokens: number;
-    funcionesEjecutadas?: string[];
-  }> {
-    try {
-      const context = await this.userService.getAssistantById(
-        assistantId,
-        userId,
-      );
+  ) {
+    const context = await this.userService.getAssistantById(
+      assistantId,
+      userId,
+    );
+    if (!context) throw new Error("Assistant not found");
 
-      if (!context) {
-        return {
-          response:
-            "⚠️ El asistente no está disponible en este momento. Intenta más tarde.",
-          input_tokens: 0,
-          output_tokens: 0,
-        };
-      }
+    const availableFunctions =
+      await this.customFunctionService.getFunctionsList(userId, assistantId);
 
-      const availableFunctions =
-        await this.customFunctionService.getFunctionsList(userId, assistantId);
+    /** ========= PRIMER PROMPT ========= */
+    const firstPrompt = this.promptGen.generateUnifiedPrompt(
+      context.name,
+      context.description,
+      memoryContext,
+      userMessage,
+      availableFunctions,
+    );
 
-      const firstPrompt = this.promptGen.generateUnifiedPrompt(
-        context.name,
-        context.description,
-        memoryContext,
-        userMessage,
-        availableFunctions,
-      );
+    const firstPrediction = await this.predictionService.predict(firstPrompt);
 
-      const firstPrediction = await this.predictionService.predict(firstPrompt);
+    let input_tokens = firstPrediction.input_tokens || 0;
+    let output_tokens = firstPrediction.output_tokens || 0;
 
-      let input_tokens = firstPrediction.input_tokens ?? 0;
-      let output_tokens = firstPrediction.output_tokens ?? 0;
+    const functionCall = this.customFunctionService.parseFunctionCall(
+      firstPrediction.output,
+    );
 
-      if (!firstPrediction.output) {
-        return {
-          response:
-            "⚠️ No pude generar una respuesta en este momento. Intenta nuevamente.",
-          input_tokens,
-          output_tokens,
-        };
-      }
-
-      const functionCall = this.customFunctionService.parseFunctionCall(
-        firstPrediction.output,
-      );
-
-      // 👉 RESPUESTA DIRECTA
-      if (!functionCall) {
-        return {
-          response: firstPrediction.output,
-          input_tokens,
-          output_tokens,
-        };
-      }
-
-      // 👉 EJECUTAR FUNCIÓN
-      let functionResult: any = null;
-
-      try {
-        functionResult = await this.customFunctionService.executeFunction(
-          functionCall.functionName,
-          functionCall.parameters,
-          userId,
-          assistantId,
-        );
-      } catch (fnError) {
-        this.logger.error("Function execution error:", fnError);
-
-        return {
-          response:
-            "⚠️ Ocurrió un problema al procesar tu solicitud. Intenta nuevamente.",
-          input_tokens,
-          output_tokens,
-        };
-      }
-
-      const secondPrompt = this.promptGen.generateUnifiedPrompt(
-        context.name,
-        context.description,
-        memoryContext,
-        userMessage,
-        availableFunctions,
-        [
-          {
-            name: functionCall.functionName,
-            parameters: functionCall.parameters,
-            result: functionResult,
-          },
-        ],
-      );
-
-      const secondPrediction =
-        await this.predictionService.predict(secondPrompt);
-
-      input_tokens += secondPrediction.input_tokens ?? 0;
-      output_tokens += secondPrediction.output_tokens ?? 0;
-
+    /** ========= RESPUESTA NORMAL ========= */
+    if (!functionCall) {
       return {
-        response:
-          secondPrediction.output || "⚠️ No pude procesar la respuesta final.",
+        response: firstPrediction.output,
         input_tokens,
         output_tokens,
-        funcionesEjecutadas: [
-          `[${functionCall.functionName}:${functionCall.parameters.join(
-            ", ",
-          )}]`,
-        ],
-      };
-    } catch (error) {
-      this.logger.error("runTelegramAgent fatal error:", error);
-
-      return {
-        response:
-          "❌ Ocurrió un error interno. Intenta nuevamente en unos segundos.",
-        input_tokens: 0,
-        output_tokens: 0,
       };
     }
+
+    /** ========= EJECUCIÓN DE FUNCIÓN ========= */
+    let functionResult: any;
+
+    try {
+      const apiResult = await this.customFunctionService.executeFunction(
+        functionCall.functionName,
+        functionCall.parameters,
+        userId,
+        assistantId,
+      );
+
+      functionResult = {
+        name: functionCall.functionName,
+        parameters: functionCall.parameters,
+        result: apiResult,
+      };
+    } catch (err: any) {
+      // ⛔ NO lanzar error
+      // ⛔ NO borrar chat
+      // ✅ Pasar el error al modelo
+      functionResult = {
+        name: functionCall.functionName,
+        parameters: functionCall.parameters,
+        error: {
+          message: err?.message || "Error desconocido",
+          stack: err?.stack || "",
+        },
+      };
+    }
+
+    /** ========= SEGUNDO PROMPT (CON RESULTADO O ERROR) ========= */
+    const secondPrompt = this.promptGen.generateUnifiedPrompt(
+      context.name,
+      context.description,
+      memoryContext,
+      userMessage,
+      availableFunctions,
+      [functionResult],
+    );
+
+    const secondPrediction = await this.predictionService.predict(secondPrompt);
+
+    input_tokens += secondPrediction.input_tokens || 0;
+    output_tokens += secondPrediction.output_tokens || 0;
+
+    return {
+      response: secondPrediction.output,
+      input_tokens,
+      output_tokens,
+      funcionesEjecutadas: [
+        `[${functionCall.functionName}:${functionCall.parameters.join(", ")}]`,
+      ],
+    };
   }
 
   private async setTelegramWebhook(botToken: string) {
