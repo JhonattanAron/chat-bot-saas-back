@@ -20,6 +20,8 @@ import { SystemModule } from "./modules/system/system.module";
 import { MailModule } from "./modules/ai-emails/mail.module";
 import { CampaignsModule } from "./modules/automated-tasks/campaign-automated/campaign-automated.module";
 import { WebChatConfigModule } from "./modules/skd-web/web-chat-config.module";
+import { GoogleMapsModule } from "./modules/google-maps-leads/google-maps.module";
+import { WhatsappModule } from "./modules/whastAppQr/whatsapp.module";
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { WebChatConfigModule } from "./modules/skd-web/web-chat-config.module";
     BatchesModule,
     SystemModule,
     CampaignsModule,
+    GoogleMapsModule,
+    WhatsappModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],
