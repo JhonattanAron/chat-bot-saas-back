@@ -17,10 +17,11 @@ export class WhatsappService {
   async startSession(userId: string, onQR: (qr: string) => void) {
     // eliminar sesión antigua si existe
     if (this.sessions.has(userId)) {
-      this.logger.log(`Sesión antigua eliminada para ${userId}`);
+      this.logger.log(`🗑️ Sesión antigua eliminada para ${userId}`);
       this.sessions.delete(userId);
     }
 
+    // inicializar estado de autenticación
     const { state, saveCreds } = await useMultiFileAuthState(
       `./sessions/${userId}`,
     );
@@ -33,50 +34,49 @@ export class WhatsappService {
     // guardar credenciales automáticamente
     sock.ev.on("creds.update", saveCreds);
 
+    // guardar socket en memoria
+    this.sessions.set(userId, sock);
+
     // manejar eventos de conexión
     sock.ev.on("connection.update", (update) => {
+      // QR generado
       if (update.qr) {
-        this.logger.log(`QR generado para ${userId}`);
+        this.logger.log(`📷 QR generado para ${userId}`);
         onQR(update.qr);
       }
 
+      // sesión conectada
       if (update.connection === "open") {
-        this.logger.log(`WhatsApp conectado: ${userId}`);
+        this.logger.log(`✅ WhatsApp conectado: ${userId}`);
       }
 
+      // sesión cerrada
       if (update.connection === "close") {
         const lastDisconnect = update.lastDisconnect;
         let statusCode: number | undefined;
 
-        // verificar si es un Boom
+        // verificar si es un Boom (Baileys error)
         if (lastDisconnect?.error && "output" in lastDisconnect.error) {
           statusCode = (lastDisconnect.error as any).output?.statusCode;
         }
 
+        // eliminar socket de memoria
         this.sessions.delete(userId);
 
-        if (statusCode !== DisconnectReason.loggedOut) {
-          this.logger.warn(`Sesión cerrada para ${userId}, reiniciando...`);
-          setTimeout(() => this.startSession(userId, onQR), 3000);
+        if (statusCode === DisconnectReason.loggedOut) {
+          this.logger.warn(`⚠️ Sesión de ${userId} cerrada por logout`);
+        } else if (statusCode === 409) {
+          this.logger.warn(
+            `⚠️ Sesión de ${userId} cerrada por conflicto (abierta en otro dispositivo), no reiniciando`,
+          );
         } else {
-          this.logger.warn(`Sesión de ${userId} cerrada por logout`);
+          this.logger.warn(
+            `🔄 Sesión cerrada para ${userId}, reiniciando en 3s...`,
+          );
+          setTimeout(() => this.startSession(userId, onQR), 3000);
         }
       }
     });
-
-    // manejar errores críticos de conexión
-    sock.ev.on("connection.update", (update) => {
-      if (update.lastDisconnect?.error) {
-        this.logger.error(
-          `Error de conexión para ${userId}: ${update.lastDisconnect.error}`,
-        );
-        this.sessions.delete(userId);
-        setTimeout(() => this.startSession(userId, onQR), 3000);
-      }
-    });
-
-    // guardar socket en memoria
-    this.sessions.set(userId, sock);
   }
 
   /* ======================
