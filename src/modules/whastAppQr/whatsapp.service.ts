@@ -138,25 +138,28 @@ export class WhatsappService {
     const sock = this.getSession(userId);
     if (!sock) throw new Error("Sesión no iniciada");
 
-    const results: { phone: string; status: "sent" | "failed"; error?: any }[] =
-      [];
+    // Respuesta inmediata al frontend
+    console.log(`🚀 Iniciando envío masivo para ${phones.length} números`);
 
-    for (const phone of phones) {
-      try {
-        await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
-        console.log(`✅ Mensaje enviado a ${phone}`);
-        results.push({ phone, status: "sent" });
-      } catch (err) {
-        console.warn(`⚠️ No se pudo enviar a ${phone}:`, err.message || err);
-        results.push({ phone, status: "failed", error: err });
+    // Ejecutar en segundo plano
+    (async () => {
+      for (const phone of phones) {
+        try {
+          await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
+          console.log(`✅ Mensaje enviado a ${phone}`);
+        } catch (err) {
+          console.warn(`⚠️ No se pudo enviar a ${phone}:`, err.message || err);
+        }
+        await delay(3000, 6000); // anti-ban
       }
+      console.log("📩 Envío masivo finalizado");
+    })();
 
-      // Delay anti-ban
-      await delay(3000, 6000);
-    }
-
-    // Opcional: retornar resultados para front
-    return results;
+    // Retornar inmediato al frontend
+    return {
+      status: "ok",
+      message: `Envío masivo iniciado para ${phones.length} números`,
+    };
   }
 
   /* ======================
