@@ -15,7 +15,6 @@ export class WhatsappService {
   /* ======================
      INICIAR SESIÓN / CONECTAR
   ====================== */
-
   async startSession(userId: string, onQR: (qr: string) => void) {
     // eliminar sesión antigua en memoria
     if (this.sessions.has(userId)) {
@@ -23,12 +22,7 @@ export class WhatsappService {
       this.sessions.delete(userId);
     }
 
-    // eliminar carpeta de sesión antigua
     const sessionPath = `./sessions/${userId}`;
-    if (existsSync(sessionPath)) {
-      this.logger.log(`🗑️ Eliminando carpeta de sesión antigua para ${userId}`);
-      rmSync(sessionPath, { recursive: true, force: true });
-    }
 
     // inicializar estado de autenticación
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
@@ -63,12 +57,12 @@ export class WhatsappService {
           statusCode = (lastDisconnect.error as any).output?.statusCode;
         }
 
+        // eliminar socket de memoria
         this.sessions.delete(userId);
 
         if (statusCode === DisconnectReason.loggedOut) {
           this.logger.warn(`⚠️ Sesión de ${userId} cerrada por logout`);
           // borrar carpeta solo en logout
-          const sessionPath = `./sessions/${userId}`;
           if (existsSync(sessionPath))
             rmSync(sessionPath, { recursive: true, force: true });
         } else if (statusCode === 409) {
@@ -77,9 +71,44 @@ export class WhatsappService {
           );
         } else {
           this.logger.warn(
-            `🔄 Sesión cerrada para ${userId}, reiniciando socket en 3s sin borrar sesión...`,
+            `🔄 Error temporal, reconectando socket para ${userId}...`,
           );
-          setTimeout(() => this.startSession(userId, onQR), 3000); // no borrar sesión
+          setTimeout(() => this.reconnectSocket(userId, onQR), 3000);
+        }
+      }
+    });
+  }
+
+  /* ======================
+     RECONEXIÓN SIN BORRAR SESIÓN
+  ====================== */
+  private async reconnectSocket(userId: string, onQR: (qr: string) => void) {
+    const sessionPath = `./sessions/${userId}`;
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+
+    const sock = makeWASocket({ auth: state, printQRInTerminal: false });
+    sock.ev.on("creds.update", saveCreds);
+    this.sessions.set(userId, sock);
+
+    sock.ev.on("connection.update", (update) => {
+      if (update.qr) onQR(update.qr);
+      if (update.connection === "open")
+        this.logger.log(`✅ WhatsApp reconectado: ${userId}`);
+      if (update.connection === "close") {
+        const lastDisconnect = update.lastDisconnect;
+        let statusCode: number | undefined;
+
+        if (lastDisconnect?.error && "output" in lastDisconnect.error) {
+          statusCode = (lastDisconnect.error as any).output?.statusCode;
+        }
+
+        this.sessions.delete(userId);
+
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 409) {
+          this.logger.warn(`⚠️ Sesión de ${userId} cerrada permanentemente`);
+        } else {
+          // reconectar otra vez si es un error temporal
+          setTimeout(() => this.reconnectSocket(userId, onQR), 3000);
         }
       }
     });
