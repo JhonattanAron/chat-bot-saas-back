@@ -4,8 +4,9 @@ import makeWASocket, {
   DisconnectReason,
   WASocket,
 } from "@whiskeysockets/baileys";
-import { delay } from "./utils/delay.util";
+import { Boom } from "@hapi/boom";
 import { existsSync, rmSync } from "fs";
+import { delay } from "./utils/delay.util";
 
 @Injectable()
 export class WhatsappService {
@@ -13,105 +14,108 @@ export class WhatsappService {
   private sessions = new Map<string, WASocket>();
 
   /* ======================
-     INICIAR SESIÓN / CONECTAR
+     INICIAR SESIÓN
   ====================== */
-  async startSession(userId: string, onQR: (qr: string) => void) {
-    // eliminar sesión antigua en memoria
-    if (this.sessions.has(userId)) {
-      this.logger.log(`🗑️ Sesión antigua eliminada para ${userId}`);
-      this.sessions.delete(userId);
-    }
-
+  async startSession(
+    userId: string,
+    onUpdate: (data: { qr?: string | null; connected?: boolean }) => void,
+  ) {
     const sessionPath = `./sessions/${userId}`;
 
-    // inicializar estado de autenticación
+    // evitar sockets duplicados
+    if (this.sessions.has(userId)) {
+      this.logger.warn(`⚠️ Sesión ya activa para ${userId}`);
+      return;
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
+      markOnlineOnConnect: false,
+      syncFullHistory: false,
     });
 
-    // guardar credenciales automáticamente
     sock.ev.on("creds.update", saveCreds);
-
-    // guardar socket en memoria
     this.sessions.set(userId, sock);
 
-    // manejar eventos de conexión
     sock.ev.on("connection.update", (update) => {
-      if (update.qr) {
+      const { connection, qr, lastDisconnect } = update;
+
+      /* 📷 QR */
+      if (qr) {
         this.logger.log(`📷 QR generado para ${userId}`);
-        onQR(update.qr);
+        onUpdate({ qr, connected: false });
+        return;
       }
 
-      if (update.connection === "open") {
+      /* ✅ CONECTADO */
+      if (connection === "open") {
         this.logger.log(`✅ WhatsApp conectado: ${userId}`);
+        onUpdate({ qr: null, connected: true });
+        return;
       }
 
-      if (update.connection === "close") {
-        const lastDisconnect = update.lastDisconnect;
-        let statusCode: number | undefined;
+      /* 🔌 DESCONECTADO */
+      if (connection === "close") {
+        const error = lastDisconnect?.error;
+        const statusCode = this.getStatusCode(error);
 
-        if (lastDisconnect?.error && "output" in lastDisconnect.error) {
-          statusCode = (lastDisconnect.error as any).output?.statusCode;
-        }
-
-        // eliminar socket de memoria
         this.sessions.delete(userId);
 
-        if (statusCode === DisconnectReason.loggedOut) {
-          this.logger.warn(`⚠️ Sesión de ${userId} cerrada por logout`);
-          // borrar carpeta solo en logout
-          if (existsSync(sessionPath))
+        /* 🚪 LOGOUT REAL */
+        if (this.isLoggedOut(error)) {
+          this.logger.warn(`🚪 Logout detectado para ${userId}`);
+
+          if (existsSync(sessionPath)) {
             rmSync(sessionPath, { recursive: true, force: true });
-        } else if (statusCode === 409) {
-          this.logger.warn(
-            `⚠️ Sesión de ${userId} cerrada por conflicto (abierta en otro dispositivo), no reiniciando`,
-          );
-        } else {
-          this.logger.warn(
-            `🔄 Error temporal, reconectando socket para ${userId}...`,
-          );
-          setTimeout(() => this.reconnectSocket(userId, onQR), 3000);
+            this.logger.log(`🧹 Carpeta eliminada: ${sessionPath}`);
+          }
+
+          onUpdate({ connected: false });
+          return;
         }
+
+        /* ⚠️ CONFLICTO 409 */
+        if (statusCode === 409) {
+          this.logger.warn(`⚠️ Conflicto de sesión para ${userId}`);
+          onUpdate({ connected: false });
+          return;
+        }
+
+        /* 🔄 ERROR TEMPORAL → REINTENTAR */
+        this.logger.warn(`🔄 Error temporal, reintentando ${userId}`);
+        setTimeout(() => {
+          this.startSession(userId, onUpdate);
+        }, 3000);
       }
     });
   }
 
   /* ======================
-     RECONEXIÓN SIN BORRAR SESIÓN
+     HELPERS (TYPE SAFE)
   ====================== */
-  private async reconnectSocket(userId: string, onQR: (qr: string) => void) {
-    const sessionPath = `./sessions/${userId}`;
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  private getStatusCode(error: unknown): number | undefined {
+    if (error instanceof Boom) {
+      return error.output?.statusCode;
+    }
+    return undefined;
+  }
 
-    const sock = makeWASocket({ auth: state, printQRInTerminal: false });
-    sock.ev.on("creds.update", saveCreds);
-    this.sessions.set(userId, sock);
+  private isLoggedOut(error: unknown): boolean {
+    if (error instanceof Boom) {
+      return (
+        error.output?.statusCode === DisconnectReason.loggedOut ||
+        error.data === DisconnectReason.loggedOut
+      );
+    }
 
-    sock.ev.on("connection.update", (update) => {
-      if (update.qr) onQR(update.qr);
-      if (update.connection === "open")
-        this.logger.log(`✅ WhatsApp reconectado: ${userId}`);
-      if (update.connection === "close") {
-        const lastDisconnect = update.lastDisconnect;
-        let statusCode: number | undefined;
+    if (error instanceof Error) {
+      return error.message.toLowerCase().includes("logged out");
+    }
 
-        if (lastDisconnect?.error && "output" in lastDisconnect.error) {
-          statusCode = (lastDisconnect.error as any).output?.statusCode;
-        }
-
-        this.sessions.delete(userId);
-
-        if (statusCode === DisconnectReason.loggedOut || statusCode === 409) {
-          this.logger.warn(`⚠️ Sesión de ${userId} cerrada permanentemente`);
-        } else {
-          // reconectar otra vez si es un error temporal
-          setTimeout(() => this.reconnectSocket(userId, onQR), 3000);
-        }
-      }
-    });
+    return false;
   }
 
   /* ======================
@@ -122,7 +126,7 @@ export class WhatsappService {
   }
 
   /* ======================
-     ENVIAR UN MENSAJE
+     ENVIAR MENSAJE
   ====================== */
   async sendMessage(userId: string, phone: string, message: string) {
     const sock = this.getSession(userId);
@@ -132,38 +136,33 @@ export class WhatsappService {
   }
 
   /* ======================
-     ENVIAR MENSAJES MASIVOS
+     ENVÍO MASIVO
   ====================== */
   async sendBulk(userId: string, phones: string[], message: string) {
     const sock = this.getSession(userId);
     if (!sock) throw new Error("Sesión no iniciada");
 
-    // Respuesta inmediata al frontend
-    console.log(`🚀 Iniciando envío masivo para ${phones.length} números`);
-
-    // Ejecutar en segundo plano
     (async () => {
       for (const phone of phones) {
         try {
           await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
-          console.log(`✅ Mensaje enviado a ${phone}`);
-        } catch (err) {
-          console.warn(`⚠️ No se pudo enviar a ${phone}:`, err.message || err);
+          this.logger.log(`✅ Enviado a ${phone}`);
+        } catch (err: any) {
+          this.logger.warn(`⚠️ Error enviando a ${phone}: ${err?.message}`);
         }
-        await delay(3000, 6000); // anti-ban
+        await delay(3000, 6000);
       }
-      console.log("📩 Envío masivo finalizado");
+      this.logger.log("📩 Envío masivo finalizado");
     })();
 
-    // Retornar inmediato al frontend
     return {
       status: "ok",
-      message: `Envío masivo iniciado para ${phones.length} números`,
+      message: `Envío iniciado para ${phones.length} números`,
     };
   }
 
   /* ======================
-     VERIFICAR SI HAY SESIÓN ACTIVA
+     ESTADO
   ====================== */
   isConnected(userId: string): boolean {
     return this.sessions.has(userId);
