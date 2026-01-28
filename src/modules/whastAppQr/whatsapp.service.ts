@@ -63,18 +63,21 @@ export class WhatsappService {
           statusCode = (lastDisconnect.error as any).output?.statusCode;
         }
 
-        // eliminar socket de memoria
         this.sessions.delete(userId);
 
         if (statusCode === DisconnectReason.loggedOut) {
           this.logger.warn(`⚠️ Sesión de ${userId} cerrada por logout`);
+          // borrar carpeta solo en logout
+          const sessionPath = `./sessions/${userId}`;
+          if (existsSync(sessionPath))
+            rmSync(sessionPath, { recursive: true, force: true });
         } else if (statusCode === 409) {
           this.logger.warn(
-            `⚠️ Sesión de ${userId} cerrada por conflicto (abierta en otro dispositivo), no reiniciando`,
+            `⚠️ Sesión de ${userId} cerrada por conflicto, no reiniciando`,
           );
         } else {
           this.logger.warn(
-            `🔄 Sesión cerrada para ${userId}, reiniciando en 3s...`,
+            `🔄 Sesión cerrada para ${userId}, reiniciando socket en 3s sin borrar sesión...`,
           );
           setTimeout(() => this.startSession(userId, onQR), 3000);
         }
