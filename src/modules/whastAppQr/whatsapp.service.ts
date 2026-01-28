@@ -5,6 +5,7 @@ import makeWASocket, {
   WASocket,
 } from "@whiskeysockets/baileys";
 import { delay } from "./utils/delay.util";
+import { existsSync, rmSync } from "fs";
 
 @Injectable()
 export class WhatsappService {
@@ -14,17 +15,23 @@ export class WhatsappService {
   /* ======================
      INICIAR SESIÓN / CONECTAR
   ====================== */
+
   async startSession(userId: string, onQR: (qr: string) => void) {
-    // eliminar sesión antigua si existe
+    // eliminar sesión antigua en memoria
     if (this.sessions.has(userId)) {
       this.logger.log(`🗑️ Sesión antigua eliminada para ${userId}`);
       this.sessions.delete(userId);
     }
 
+    // eliminar carpeta de sesión antigua
+    const sessionPath = `./sessions/${userId}`;
+    if (existsSync(sessionPath)) {
+      this.logger.log(`🗑️ Eliminando carpeta de sesión antigua para ${userId}`);
+      rmSync(sessionPath, { recursive: true, force: true });
+    }
+
     // inicializar estado de autenticación
-    const { state, saveCreds } = await useMultiFileAuthState(
-      `./sessions/${userId}`,
-    );
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
       auth: state,
@@ -39,23 +46,19 @@ export class WhatsappService {
 
     // manejar eventos de conexión
     sock.ev.on("connection.update", (update) => {
-      // QR generado
       if (update.qr) {
         this.logger.log(`📷 QR generado para ${userId}`);
         onQR(update.qr);
       }
 
-      // sesión conectada
       if (update.connection === "open") {
         this.logger.log(`✅ WhatsApp conectado: ${userId}`);
       }
 
-      // sesión cerrada
       if (update.connection === "close") {
         const lastDisconnect = update.lastDisconnect;
         let statusCode: number | undefined;
 
-        // verificar si es un Boom (Baileys error)
         if (lastDisconnect?.error && "output" in lastDisconnect.error) {
           statusCode = (lastDisconnect.error as any).output?.statusCode;
         }
