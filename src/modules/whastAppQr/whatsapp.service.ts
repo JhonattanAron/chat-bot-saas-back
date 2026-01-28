@@ -73,13 +73,13 @@ export class WhatsappService {
             rmSync(sessionPath, { recursive: true, force: true });
         } else if (statusCode === 409) {
           this.logger.warn(
-            `⚠️ Sesión de ${userId} cerrada por conflicto, no reiniciando`,
+            `⚠️ Sesión de ${userId} cerrada por conflicto (abierta en otro dispositivo), no reiniciando`,
           );
         } else {
           this.logger.warn(
             `🔄 Sesión cerrada para ${userId}, reiniciando socket en 3s sin borrar sesión...`,
           );
-          setTimeout(() => this.startSession(userId, onQR), 3000);
+          setTimeout(() => this.startSession(userId, onQR), 3000); // no borrar sesión
         }
       }
     });
