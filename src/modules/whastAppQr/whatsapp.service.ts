@@ -138,10 +138,25 @@ export class WhatsappService {
     const sock = this.getSession(userId);
     if (!sock) throw new Error("Sesión no iniciada");
 
+    const results: { phone: string; status: "sent" | "failed"; error?: any }[] =
+      [];
+
     for (const phone of phones) {
-      await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
-      await delay(3000, 6000); // anti-ban
+      try {
+        await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
+        console.log(`✅ Mensaje enviado a ${phone}`);
+        results.push({ phone, status: "sent" });
+      } catch (err) {
+        console.warn(`⚠️ No se pudo enviar a ${phone}:`, err.message || err);
+        results.push({ phone, status: "failed", error: err });
+      }
+
+      // Delay anti-ban
+      await delay(3000, 6000);
     }
+
+    // Opcional: retornar resultados para front
+    return results;
   }
 
   /* ======================
