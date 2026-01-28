@@ -12,6 +12,11 @@ import { SendBulkDto } from "./dto/send-bulk.dto";
 
 @Controller("whatsapp")
 export class WhatsappController {
+  private sessionState = new Map<
+    string,
+    { qr?: string | null; connected?: boolean }
+  >();
+
   constructor(private readonly service: WhatsappService) {}
 
   @Post("send")
@@ -29,28 +34,22 @@ export class WhatsappController {
     return { connected: !!session }; // true si la sesión existe
   }
   // pseudo-controlador
+
   @Post("start-session")
-  async startSession(@Body() body: { userId: string }) {
+  startSession(@Body() body: { userId: string }) {
     const { userId } = body;
 
-    try {
-      // si ya hay socket en memoria
-      if (this.service.isConnected(userId)) {
-        return { qr: null, connected: true };
-      }
-
-      let qrCode: string | null = null;
-      await this.service.startSession(userId, (qr) => {
-        qrCode = qr;
-      });
-
-      // si se genera QR, no está conectado todavía
-      return { qr: qrCode, connected: qrCode ? false : true };
-    } catch (err) {
-      console.error(err);
-      throw new InternalServerErrorException(
-        "Error al iniciar sesión WhatsApp",
-      );
+    // si ya está conectado
+    if (this.service.isConnected(userId)) {
+      return { status: "already_connected" };
     }
+
+    this.service.startSession(userId, (data) => {
+      // aquí NO respondes HTTP
+      // aquí solo actualizas estado en memoria / socket / sse
+      this.sessionState.set(userId, data);
+    });
+
+    return { status: "started" };
   }
 }
