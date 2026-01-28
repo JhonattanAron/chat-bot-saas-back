@@ -33,20 +33,28 @@ export class WhatsappController {
     const session = this.service.getSession(userId);
     return { connected: !!session }; // true si la sesión existe
   }
+  @Get("session-state")
+  getSessionState(@Query("userId") userId: string) {
+    return (
+      this.sessionState.get(userId) ?? {
+        qr: null,
+        connected: this.service.isConnected(userId),
+      }
+    );
+  }
+
   // pseudo-controlador
 
   @Post("start-session")
   startSession(@Body() body: { userId: string }) {
     const { userId } = body;
 
-    // si ya está conectado
     if (this.service.isConnected(userId)) {
+      this.sessionState.set(userId, { qr: null, connected: true });
       return { status: "already_connected" };
     }
 
     this.service.startSession(userId, (data) => {
-      // aquí NO respondes HTTP
-      // aquí solo actualizas estado en memoria / socket / sse
       this.sessionState.set(userId, data);
     });
 
