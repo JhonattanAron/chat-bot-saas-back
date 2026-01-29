@@ -4,6 +4,9 @@ import type { StickReferencesDocument } from "./stick-references.schema";
 import * as crypto from "crypto";
 import { InjectModel } from "@nestjs/mongoose";
 import { StickReferences } from "./stick-references.schema";
+import { Cron } from "@nestjs/schedule";
+
+export type BillingCycle = "monthly" | "yearly";
 
 export interface PlanLimits {
   name: string;
@@ -21,14 +24,17 @@ export class PlansService {
   private readonly encryptionKey =
     process.env.PLAN_ENCRYPTION_KEY || "default-key-change-in-production";
 
+  // =========================
+  // PLAN DEFINITIONS
+  // =========================
   private readonly plans: Record<string, PlanLimits> = {
     basico: {
       name: "Básico",
-      max_tokens: 10000000,
+      max_tokens: 10_000_000,
       max_conversations_month: 240,
       max_conversations_day: 8,
       max_chatbots: 1,
-      tokens_per_conversation: 40000,
+      tokens_per_conversation: 40_000,
       cost_per_token: 0.0000005,
       features: [
         "1 chatbot activo",
@@ -40,11 +46,11 @@ export class PlansService {
     },
     estandar: {
       name: "Estándar",
-      max_tokens: 23000000,
+      max_tokens: 23_000_000,
       max_conversations_month: 570,
       max_conversations_day: 19,
       max_chatbots: 2,
-      tokens_per_conversation: 40000,
+      tokens_per_conversation: 40_000,
       cost_per_token: 0.00000039,
       features: [
         "2 chatbots activos",
@@ -57,11 +63,11 @@ export class PlansService {
     },
     avanzado: {
       name: "Avanzado",
-      max_tokens: 60000000,
+      max_tokens: 60_000_000,
       max_conversations_month: 1500,
       max_conversations_day: 50,
       max_chatbots: 5,
-      tokens_per_conversation: 40000,
+      tokens_per_conversation: 40_000,
       cost_per_token: 0.00000037,
       features: [
         "5 chatbots activos",
@@ -75,11 +81,11 @@ export class PlansService {
     },
     pro: {
       name: "Pro",
-      max_tokens: 140000000,
+      max_tokens: 140_000_000,
       max_conversations_month: 3480,
       max_conversations_day: 116,
       max_chatbots: -1,
-      tokens_per_conversation: 40000,
+      tokens_per_conversation: 40_000,
       cost_per_token: 0.00000032,
       features: [
         "Chatbots ilimitados",
@@ -95,19 +101,22 @@ export class PlansService {
 
   constructor(
     @InjectModel(StickReferences.name)
-    private stickReferencesModel: Model<StickReferencesDocument>
+    private readonly stickReferencesModel: Model<StickReferencesDocument>,
   ) {}
 
-  private encryptPlan(planName: string): string {
+  // =========================
+  // ENCRYPT / DECRYPT
+  // =========================
+  private encryptPlan(payload: string): string {
     const algorithm = "aes-256-cbc";
     const key = crypto.scryptSync(this.encryptionKey, "salt", 32);
     const iv = crypto.randomBytes(16);
 
     const cipher = crypto.createCipheriv(algorithm, key, iv);
-    let encrypted = cipher.update(planName, "utf8", "hex");
-    encrypted += cipher.final("hex");
+    const encrypted =
+      cipher.update(payload, "utf8", "hex") + cipher.final("hex");
 
-    return iv.toString("hex") + ":" + encrypted;
+    return `${iv.toString("hex")}:${encrypted}`;
   }
 
   private decryptPlan(encryptedPlan: string): string {
@@ -115,72 +124,96 @@ export class PlansService {
       const algorithm = "aes-256-cbc";
       const key = crypto.scryptSync(this.encryptionKey, "salt", 32);
 
-      const parts = encryptedPlan.split(":");
-      const iv = Buffer.from(parts[0], "hex");
-      const encrypted = parts[1];
+      const [ivHex, encrypted] = encryptedPlan.split(":");
+      const iv = Buffer.from(ivHex, "hex");
 
       const decipher = crypto.createDecipheriv(algorithm, key, iv);
-      let decrypted = decipher.update(encrypted, "hex", "utf8");
-      decrypted += decipher.final("utf8");
-
-      return decrypted;
-    } catch (error) {
-      return "basico";
+      return decipher.update(encrypted, "hex", "utf8") + decipher.final("utf8");
+    } catch {
+      return "basico:monthly";
     }
   }
 
+  // =========================
+  // CENTRAL PARSER (CLAVE)
+  // =========================
+  private parseEncryptedPlan(reference: string): {
+    planKey: string;
+    billingCycle: BillingCycle;
+  } {
+    const decrypted = this.decryptPlan(reference);
+    const [planKey, billingCycle] = decrypted.split(":");
+
+    return {
+      planKey: this.plans[planKey] ? planKey : "basico",
+      billingCycle: billingCycle === "yearly" ? "yearly" : "monthly",
+    };
+  }
+
+  // =========================
+  // ASSIGN PLAN
+  // =========================
   async assignPlanToUser(
     userId: string,
-    planName: string
+    planName: string,
+    billingCycle: BillingCycle,
   ): Promise<StickReferencesDocument> {
     await this.stickReferencesModel.updateMany(
       { user_id: userId, is_active: true },
-      { is_active: false }
+      { is_active: false },
     );
 
-    const encryptedReference = this.encryptPlan(planName);
-    const expiresAt = new Date();
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    const encryptedReference = this.encryptPlan(`${planName}:${billingCycle}`);
 
-    const newReference = new this.stickReferencesModel({
+    const expiresAt = new Date();
+    billingCycle === "yearly"
+      ? expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+      : expiresAt.setMonth(expiresAt.getMonth() + 1);
+
+    return new this.stickReferencesModel({
       user_id: userId,
       reference: encryptedReference,
+      billing_cycle: billingCycle,
       is_active: true,
       expires_at: expiresAt,
-    });
-
-    return await newReference.save();
+    }).save();
   }
 
+  // =========================
+  // GET USER PLAN
+  // =========================
   async getUserPlan(
-    userId: string
+    userId: string,
   ): Promise<{ plan: PlanLimits; reference: StickReferencesDocument } | null> {
-    const activeReference = await this.stickReferencesModel.findOne({
+    const ref = await this.stickReferencesModel.findOne({
       user_id: userId,
       is_active: true,
       expires_at: { $gt: new Date() },
     });
 
-    if (!activeReference) {
-      return null;
+    if (!ref) return null;
+
+    const parsed = this.parseEncryptedPlan(ref.reference);
+
+    // autocorrección si tocaron la DB
+    if (ref.billing_cycle !== parsed.billingCycle) {
+      ref.billing_cycle = parsed.billingCycle;
+      await ref.save();
     }
 
-    const planName = this.decryptPlan(activeReference.reference);
-    const plan = this.plans[planName] || this.plans["basico"];
-
-    return { plan, reference: activeReference };
+    return {
+      plan: this.plans[parsed.planKey],
+      reference: ref,
+    };
   }
 
-  async checkUserLimits(userId: string): Promise<{
-    canCreateBot: boolean;
-    canSendMessage: boolean;
-    remainingTokens: number;
-    remainingBots: number;
-    currentPlan: string;
-  }> {
-    const userPlan = await this.getUserPlan(userId);
+  // =========================
+  // LIMIT CHECK
+  // =========================
+  async checkUserLimits(userId: string) {
+    const data = await this.getUserPlan(userId);
 
-    if (!userPlan) {
+    if (!data) {
       return {
         canCreateBot: false,
         canSendMessage: false,
@@ -193,25 +226,38 @@ export class PlansService {
     const currentBots = 0;
     const usedTokens = 0;
 
-    const canCreateBot =
-      userPlan.plan.max_chatbots === -1 ||
-      currentBots < userPlan.plan.max_chatbots;
-    const remainingTokens = userPlan.plan.max_tokens - usedTokens;
-    const canSendMessage = remainingTokens > 0;
+    const unlimited = data.plan.max_chatbots === -1;
 
     return {
-      canCreateBot,
-      canSendMessage,
-      remainingTokens,
-      remainingBots:
-        userPlan.plan.max_chatbots === -1
-          ? -1
-          : userPlan.plan.max_chatbots - currentBots,
-      currentPlan: userPlan.plan.name,
+      canCreateBot: unlimited || currentBots < data.plan.max_chatbots,
+      canSendMessage: usedTokens < data.plan.max_tokens,
+      remainingTokens: data.plan.max_tokens - usedTokens,
+      remainingBots: unlimited ? -1 : data.plan.max_chatbots - currentBots,
+      currentPlan: data.plan.name,
     };
   }
 
-  getAllPlans(): Record<string, PlanLimits> {
+  // =========================
+  // PUBLIC
+  // =========================
+  getAllPlans() {
     return this.plans;
+  }
+
+  // =========================
+  // CRON — EXPIRE PLANS
+  // =========================
+  @Cron("0 0 * * *")
+  async deactivateExpiredPlans() {
+    const result = await this.stickReferencesModel.updateMany(
+      { is_active: true, expires_at: { $lte: new Date() } },
+      { is_active: false },
+    );
+
+    console.log(
+      `[CRON] Planes expirados desactivados: ${result.modifiedCount}`,
+    );
+
+    return result;
   }
 }

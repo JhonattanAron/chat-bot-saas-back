@@ -1,6 +1,12 @@
 import { Controller, Get, Post, Body } from "@nestjs/common";
 import { PlansService } from "./plans.service";
 
+type AssignPlanBody = {
+  userId: string;
+  planName: string;
+  billingCycle: "monthly" | "yearly";
+};
+
 @Controller("plans")
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
@@ -14,15 +20,20 @@ export class PlansController {
   }
 
   @Post("assign")
-  async assignPlan(@Body() body: { userId: string; planName: string }) {
+  async assignPlan(@Body() body: AssignPlanBody) {
     try {
       const reference = await this.plansService.assignPlanToUser(
         body.userId,
-        body.planName
+        body.planName,
+        body.billingCycle,
       );
+
       return {
         success: true,
-        message: "Plan asignado correctamente",
+        message:
+          body.billingCycle === "yearly"
+            ? "Plan anual asignado correctamente"
+            : "Plan mensual asignado correctamente",
         data: reference,
       };
     } catch (error) {
