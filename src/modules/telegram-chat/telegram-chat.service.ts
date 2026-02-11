@@ -91,10 +91,7 @@ export class TelegramChatService {
     userMessage: string,
     memoryContext: string,
   ) {
-    const context = await this.userService.getAssistantById(
-      assistantId,
-      userId,
-    );
+    const context = "";
     if (!context) throw new Error("Assistant not found");
 
     const availableFunctions =
@@ -102,8 +99,8 @@ export class TelegramChatService {
 
     // 🧠 PROMPT ÚNICO
     const firstPrompt = this.promptGen.generateUnifiedPrompt(
-      context.name,
-      context.description,
+      "",
+      "",
       memoryContext,
       userMessage,
       availableFunctions,
@@ -141,8 +138,8 @@ export class TelegramChatService {
 
     // 🧠 SEGUNDA PASADA
     const secondPrompt = this.promptGen.generateUnifiedPrompt(
-      context.name,
-      context.description,
+      "",
+      "",
       memoryContext,
       userMessage,
       availableFunctions,

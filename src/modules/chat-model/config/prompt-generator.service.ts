@@ -1,14 +1,72 @@
 import { Injectable } from "@nestjs/common";
+import { FunctionSchema } from "../model-ai/function-router.service";
 
 @Injectable()
 export class PromptGeneratorService {
-  generateUnifiedPrompt(
+  /**
+   * Generates optimized prompt using new architecture
+   * - Includes only essential function definitions
+   * - Uses JSON schema format for better parameter extraction
+   * - Minimal instructions to save tokens
+   */
+  generateOptimizedPrompt(
     assistantName: string,
     assistantDescription: string,
     userMessage: string,
     memoryContext: string,
+    functionSchemas: FunctionSchema[],
+    detectedIntent?: string,
+    functionResult?: any
+  ): string {
+    const functionsJson = this.generateFunctionJSON(functionSchemas);
+    
+    let prompt = `You are ${assistantName}. ${assistantDescription}.
+
+${memoryContext ? `Previous Context: ${memoryContext}\n` : ""}
+
+User: "${userMessage}"
+
+${
+  functionResult
+    ? `
+Function Result: ${JSON.stringify(functionResult, null, 2)}
+
+Task: Generate a natural response using the function result above.`
+    : ""
+}
+
+Available Functions:
+${functionsJson}
+
+Guidelines:
+- ${detectedIntent === "function_call" ? "Call a function using JSON format if needed." : "Respond naturally."}
+- Keep response concise.
+- Return function calls in this format:
+\`\`\`json
+{
+  "function_call": {
+    "name": "FUNCTION_NAME",
+    "parameters": {
+      "param1": "value1",
+      "param2": "value2"
+    }
+  }
+}
+\`\`\``;
+
+    return prompt;
+  }
+
+  /**
+   * Legacy method - maintained for backwards compatibility
+   */
+  generateUnifiedPrompt(
+    assistantName: string,
+    assistantDescription: string,
+    memoryContext: string,
+    userMessage: string,
     availableFunctions: any[],
-    functionResults?: any[],
+    functionResults?: any[]
   ): string {
     const functionsDescription =
       this.formatFunctionsForPrompt(availableFunctions);
@@ -18,7 +76,7 @@ export class PromptGeneratorService {
           .map((r) =>
             r.success
               ? `✔ ${r.executedFunction}: ${JSON.stringify(r.result)}`
-              : `✖ ${r.executedFunction}: ${r.error}`,
+              : `✖ ${r.executedFunction}: ${r.error}`
           )
           .join("\n")
       : "NINGUNA";
@@ -72,6 +130,41 @@ RESPUESTA OBLIGATORIA:
 `;
   }
 
+  /**
+   * Generates JSON schema format for functions (new format)
+   */
+  private generateFunctionJSON(schemas: FunctionSchema[]): string {
+    if (schemas.length === 0) {
+      return "[]";
+    }
+
+    const functionsArray = schemas.map((schema) => ({
+      name: schema.name,
+      description: schema.description,
+      parameters: {
+        type: "object",
+        properties: Object.fromEntries(
+          schema.parameters.map((param) => [
+            param.name,
+            {
+              type: param.type,
+              description: param.description,
+              enum: param.enum,
+            },
+          ])
+        ),
+        required: schema.parameters
+          .filter((p) => p.required)
+          .map((p) => p.name),
+      },
+      returns: schema.returnType,
+    }));
+
+    return `\`\`\`json
+${JSON.stringify(functionsArray, null, 2)}
+\`\`\``;
+  }
+
   private formatFunctionsForPrompt(functions: any[]): string {
     if (!functions || functions.length === 0) {
       return "- No hay funciones disponibles.";
@@ -89,3 +182,4 @@ RESPUESTA OBLIGATORIA:
       .join("\n");
   }
 }
+

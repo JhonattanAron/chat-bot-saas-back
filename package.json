@@ -49,6 +49,7 @@
     "gpt-tokenizer": "^3.0.1",
     "imap": "^0.8.19",
     "json2csv": "^6.0.0-alpha.2",
+    "libphonenumber-js": "^1.12.36",
     "mongoose": "^8.15.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",

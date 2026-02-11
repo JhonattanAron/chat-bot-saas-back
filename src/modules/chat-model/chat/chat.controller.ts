@@ -1,40 +1,56 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { ChatService } from "./chat.service";
 import { PredictionService } from "../model-ai/predictions.service";
+import { ProxyAuthGuard } from "src/modules/auth/proxy-auth.guard";
+
 // chat.controller.ts
 @Controller("chat")
 export class ChatController {
   constructor(
     private readonly chatService: ChatService,
-    private readonly predictService: PredictionService
+    private readonly predictService: PredictionService,
   ) {}
 
+  @UseGuards(ProxyAuthGuard)
   @Post("start")
   async startChat(
-    @Body() body: { userId: string; assistant_id: string; promt: string }
+    @Body()
+    body: {
+      assistant_id: string;
+      prompt: string;
+    },
+    @Req() req?: any,
   ) {
-    const { userId, assistant_id, promt } = body;
+    const { assistant_id, prompt } = body;
+    const user_id = req?.user?.id;
 
-    if (!userId || !assistant_id || !promt) {
+    if (!assistant_id || !prompt) {
       return {
         success: false,
-        error:
-          "Missing required fields: userId, assistant_id, and promt are required",
+        error: "Missing required fields: assistant_id, and prompt are required",
         received: body,
       };
     }
 
     try {
       const chat = await this.chatService.createChat(
-        userId,
+        user_id,
         assistant_id,
-        promt
+        prompt,
       );
 
       return {
         success: true,
         chat_id: chat._id,
-        user_id: userId,
+        user_id: user_id,
         assistant_id,
         message: "Chat iniciado exitosamente",
         response:
@@ -51,18 +67,6 @@ export class ChatController {
       };
     }
   }
-  @Post("voice")
-  async voice(
-    @Body() body: { chatId: string; assistantId: string; audio: string }
-  ) {
-    const { chatId, assistantId, audio } = body;
-
-    if (!chatId || !assistantId || !audio) {
-      throw new Error("chatId, assistantId y audio son obligatorios");
-    }
-
-    return this.chatService.voiceChat(chatId, assistantId, audio);
-  }
 
   @Post("message")
   async sendMessage(
@@ -72,7 +76,7 @@ export class ChatController {
       assistant_id: string;
       role: "user" | "assistant";
       content: string;
-    }
+    },
   ) {
     const { chatId, assistant_id, role, content } = body;
 
@@ -90,7 +94,7 @@ export class ChatController {
         chatId,
         assistant_id,
         role,
-        content
+        content,
       );
 
       return {
@@ -147,9 +151,11 @@ export class ChatController {
     }
   }
 
-  @Get("user/:userId")
-  async getUserChats(@Param("userId") userId: string) {
+  @UseGuards(ProxyAuthGuard)
+  @Get("get/user")
+  async getUserChats(@Req() req: any) {
     try {
+      const userId = req?.user?.id;
       const chats = await this.chatService.getUserChats(userId);
 
       return {
@@ -163,7 +169,7 @@ export class ChatController {
           lastMessage:
             chat.messages[chat.messages.length - 1]?.content?.substring(
               0,
-              100
+              100,
             ) + "..." || "No messages",
         })),
       };
@@ -175,8 +181,9 @@ export class ChatController {
       };
     }
   }
+
   @Post("model/predict")
-  async Predict(@Body() body: { userId: string; prompt: string }) {
+  async Predict(body: { userId: string; prompt: string }) {
     const predict = await this.chatService.predict(body.userId, body.prompt);
     return { predict };
   }

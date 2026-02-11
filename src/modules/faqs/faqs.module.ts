@@ -12,4 +12,6 @@ import { Faqs, FaqsSchema } from "./schema/faqs.schema";
   providers: [FaqsService],
   exports: [FaqsService],
 })
-export class FaqsModule {}
+export class FaqsModule {
+  static schema: any;
+}

@@ -131,6 +131,7 @@ export class WhatsappService {
   async sendMessage(userId: string, phone: string, message: string) {
     const sock = this.getSession(userId);
     if (!sock) throw new Error("Sesión no iniciada");
+    console.log("Mensaje Enviado....");
 
     await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
   }

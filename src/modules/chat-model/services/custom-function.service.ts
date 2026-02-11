@@ -13,23 +13,27 @@ interface FunctionExecution {
 
 @Injectable()
 export class CustomFunctionService {
-  private readonly logger = new Logger(CustomFunctionService.name);
-
   constructor(
     @InjectModel(AssistantChat.name)
-    private readonly assistantChatModel: Model<AssistantChatDocument>
+    private readonly assistantChatModel: Model<AssistantChatDocument>,
   ) {}
 
   async executeFunction(
     functionName: string,
-    parameters: string[],
+    parameters: Record<string, any> | string[],
     userId: string,
-    assistantId: string
+    assistantId: string,
   ): Promise<FunctionExecution> {
     try {
-      this.logger.log(
-        `Executing function: ${functionName} with params: ${parameters.join(", ")}`
+      console.log(
+        `Executing function: ${functionName} with params:`,
+        parameters,
       );
+
+      // Handle both array and object parameter formats
+      const paramArray = Array.isArray(parameters)
+        ? parameters
+        : Object.values(parameters);
 
       // Buscar la función en la base de datos
       const assistant = await this.assistantChatModel.findOne({
@@ -38,8 +42,8 @@ export class CustomFunctionService {
       });
 
       if (!assistant) {
-        this.logger.error(
-          `Assistant not found for userId: ${userId}, assistantId: ${assistantId}`
+        console.error(
+          `Assistant not found for userId: ${userId}, assistantId: ${assistantId}`,
         );
         return {
           success: false,
@@ -49,13 +53,13 @@ export class CustomFunctionService {
         };
       }
 
-      this.logger.log(
-        `Found assistant with ${assistant.funciones?.length || 0} functions`
+      console.log(
+        `Found assistant with ${assistant.funciones?.length || 0} functions`,
       );
 
       // Validar que existan funciones
       if (!assistant.funciones || assistant.funciones.length === 0) {
-        this.logger.warn(`No functions found for assistant ${assistantId}`);
+        console.warn(`No functions found for assistant ${assistantId}`);
         return {
           success: false,
           error: "No functions available for this assistant",
@@ -66,23 +70,24 @@ export class CustomFunctionService {
 
       // Log de todas las funciones disponibles para debugging
       assistant.funciones.forEach((func, index) => {
-        this.logger.log(
-          `Function ${index}: name="${func?.name}", type="${func?.type}"`
+        console.log(
+          `Function ${index}: name="${func?.name}", type="${func?.type}"`,
         );
       });
 
       // Buscar la función específica en el array de funciones con validación
       const functionDef = assistant.funciones.find((func) => {
         if (!func || !func.name) {
-          this.logger.warn(`Found function with undefined name at index`);
+          console.warn(`Found function with undefined name at index`);
           return false;
         }
         return func.name.toUpperCase() === functionName.toUpperCase();
       });
 
       if (!functionDef) {
-        this.logger.error(
-          `Function ${functionName} not found. Available functions: ${assistant.funciones.map((f) => f?.name || "undefined").join(", ")}`
+        console.error(
+          `Function ${functionName} not found. Available functions: ${assistant.funciones.map((f) => f?.name || "undefined").join(", ")}` +
+            ` for userId: ${userId}, assistantId: ${assistantId}`,
         );
         return {
           success: false,
@@ -92,7 +97,7 @@ export class CustomFunctionService {
         };
       }
 
-      this.logger.log(`Found function definition:`, {
+      console.log(`Found function definition:`, {
         name: functionDef.name,
         type: functionDef.type,
         hasApi: !!functionDef.api,
@@ -101,9 +106,9 @@ export class CustomFunctionService {
 
       // Ejecutar según el tipo de función
       if (functionDef.type === "api") {
-        return await this.executeApiFunction(functionDef, parameters);
+        return await this.executeApiFunction(functionDef, paramArray);
       } else if (functionDef.type === "custom") {
-        return await this.executeCustomFunction(functionDef, parameters);
+        return await this.executeCustomFunction(functionDef, paramArray);
       } else {
         return {
           success: false,
@@ -113,7 +118,7 @@ export class CustomFunctionService {
         };
       }
     } catch (error) {
-      this.logger.error(`Error executing function ${functionName}:`, error);
+      console.error(`Error executing function ${functionName}:`, error);
       return {
         success: false,
         error: error.message,
@@ -125,7 +130,7 @@ export class CustomFunctionService {
 
   private async executeApiFunction(
     functionDef: any,
-    parameters: string[]
+    paramArray: string[],
   ): Promise<FunctionExecution> {
     try {
       const { api } = functionDef;
@@ -161,11 +166,15 @@ export class CustomFunctionService {
         if (
           api.parameters &&
           Array.isArray(api.parameters) &&
-          parameters.length > 0
+          paramArray.length > 0
         ) {
           api.parameters.forEach((param: any, index: number) => {
-            if (param && param.name && index < parameters.length) {
-              queryParams.append(param.name, parameters[index].trim());
+            if (param && param.name && index < paramArray.length) {
+              const value =
+                typeof paramArray[index] === "object"
+                  ? JSON.stringify(paramArray[index])
+                  : String(paramArray[index]);
+              queryParams.append(param.name, value);
             }
           });
         }
@@ -179,22 +188,22 @@ export class CustomFunctionService {
         if (
           api.parameters &&
           Array.isArray(api.parameters) &&
-          parameters.length > 0
+          paramArray.length > 0
         ) {
           api.parameters.forEach((param: any, index: number) => {
-            if (param && param.name && index < parameters.length) {
-              body[param.name] = parameters[index].trim();
+            if (param && param.name && index < paramArray.length) {
+              body[param.name] = paramArray[index];
             }
           });
         }
         requestBody = JSON.stringify(body);
       }
 
-      this.logger.log(`Making API call to: ${requestUrl}`);
-      this.logger.log(`Method: ${api.method}`);
-      this.logger.log(`Headers:`, headers);
+      console.log(`Making API call to: ${requestUrl}`);
+      console.log(`Method: ${api.method}`);
+      console.log(`Headers:`, headers);
       if (requestBody) {
-        this.logger.log(`Body:`, requestBody);
+        console.log(`Body:`, requestBody);
       }
 
       // Realizar la petición HTTP
@@ -226,7 +235,7 @@ export class CustomFunctionService {
         executedFunction: functionDef.name,
       };
     } catch (error) {
-      this.logger.error(`Error in API function execution:`, error);
+      console.error(`Error in API function execution:`, error);
       return {
         success: false,
         error: error.message,
@@ -238,18 +247,18 @@ export class CustomFunctionService {
 
   private async executeCustomFunction(
     functionDef: any,
-    parameters: string[]
+    paramArray: string[],
   ): Promise<FunctionExecution> {
     try {
-      this.logger.log(`Executing custom function: ${functionDef.name}`);
-      this.logger.log(`Code: ${functionDef.code}`);
-      this.logger.log(`Parameters: ${parameters.join(", ")}`);
+      console.log(`Executing custom function: ${functionDef.name}`);
+      console.log(`Code: ${functionDef.code}`);
+      console.log(`Parameters: ${paramArray.join(", ")}`);
 
       // Simulación de ejecución de código personalizado
       // En un entorno real, aquí usarías un sandbox como vm2 o similar
       const result = {
         message: `Custom function ${functionDef.name} executed successfully`,
-        parameters: parameters,
+        parameters: paramArray,
         timestamp: new Date().toISOString(),
         code: functionDef.code,
       };
@@ -260,7 +269,7 @@ export class CustomFunctionService {
         executedFunction: functionDef.name,
       };
     } catch (error) {
-      this.logger.error(`Error in custom function execution:`, error);
+      console.error(`Error in custom function execution:`, error);
       return {
         success: false,
         error: error.message,
@@ -278,8 +287,8 @@ export class CustomFunctionService {
       });
 
       if (!assistant || !assistant.funciones) {
-        this.logger.warn(
-          `No assistant or functions found for userId: ${userId}, assistantId: ${assistantId}`
+        console.warn(
+          `No assistant or functions found for userId: ${userId}, assistantId: ${assistantId}`,
         );
         return [];
       }
@@ -294,34 +303,85 @@ export class CustomFunctionService {
           parameters: func.api?.parameters || [],
         }));
     } catch (error) {
-      this.logger.error(`Error getting functions list:`, error);
+      console.error(`Error getting functions list:`, error);
       return [];
     }
   }
 
+  /**
+   * Parses function calls from model output using JSON format
+   * Supports both old format [FUNC:param] and new JSON format for better parameter detection
+   */
   parseFunctionCall(
-    text: string
-  ): { functionName: string; parameters: string[] } | null {
-    // Buscar patrón [FUNCTION_NAME:param1, param2, param3]
-    const functionMatch = text.match(/\[([A-Z_]+):([^\]]+)\]/);
-
-    if (!functionMatch) {
-      return null;
+    text: string,
+  ): { functionName: string; parameters: Record<string, any> } | null {
+    // 1. Try to parse JSON format first (more reliable)
+    try {
+      const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) {
+        const json = JSON.parse(jsonMatch[1]);
+        if (json.function_call && json.function_call.name) {
+          console.log(
+            `Parsed JSON function call: ${json.function_call.name}`,
+            json.function_call.parameters,
+          );
+          return {
+            functionName: json.function_call.name.toUpperCase(),
+            parameters: json.function_call.parameters || {},
+          };
+        }
+      }
+    } catch (e) {
+      console.debug(`JSON parse failed, trying legacy format`);
     }
 
-    const functionName = functionMatch[1];
-    const parametersString = functionMatch[2];
+    // 2. Fallback: Parse legacy format [FUNCTION_NAME:param1, param2]
+    const legacyMatch = text.match(/\[([A-Z_]+):([^\]]+)\]/);
+    if (legacyMatch) {
+      const functionName = legacyMatch[1];
+      const parametersString = legacyMatch[2];
 
-    // Dividir parámetros por coma y limpiar espacios
-    const parameters = parametersString.split(",").map((param) => param.trim());
+      // Try to split as named parameters first
+      const namedParams: Record<string, any> = {};
+      const paramPairs = parametersString.split(",");
 
-    this.logger.log(
-      `Parsed function call: ${functionName} with parameters: [${parameters.join(", ")}]`
-    );
+      for (const pair of paramPairs) {
+        const trimmed = pair.trim();
+        // Check if it's key=value format
+        if (trimmed.includes("=")) {
+          const [key, value] = trimmed.split("=").map((s) => s.trim());
+          namedParams[key] = this.coerceValue(value);
+        } else {
+          // Fallback: treat as positional arg
+          namedParams[`arg_${Object.keys(namedParams).length}`] = trimmed;
+        }
+      }
 
-    return {
-      functionName,
-      parameters,
-    };
+      console.log(`Parsed legacy function call: ${functionName}`, namedParams);
+
+      return {
+        functionName,
+        parameters: namedParams,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Coerces string values to appropriate types
+   */
+  private coerceValue(value: string): any {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    if (!Number.isNaN(Number(value))) return Number(value);
+    if (value.startsWith("[") && value.endsWith("]")) {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
   }
 }

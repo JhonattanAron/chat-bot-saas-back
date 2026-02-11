@@ -22,6 +22,10 @@ import { CampaignsModule } from "./modules/automated-tasks/campaign-automated/ca
 import { WebChatConfigModule } from "./modules/skd-web/web-chat-config.module";
 import { GoogleMapsModule } from "./modules/google-maps-leads/google-maps.module";
 import { WhatsappModule } from "./modules/whastAppQr/whatsapp.module";
+import { CrmModule } from "./modules/crm/crm.module";
+import { FunctionsModule } from "./modules/functions/functions.module";
+import { AssistantChatsModule } from "./modules/assistant-chats/assistant-chats.module";
+import { ScrapersModule } from "./modules/scrapers/scrapers.module";
 
 @Module({
   imports: [
@@ -38,7 +42,6 @@ import { WhatsappModule } from "./modules/whastAppQr/whatsapp.module";
     FaqsModule,
     ApiKeyValidateModule,
     DashboardModule,
-    TelegramChatModule,
     WebChatConfigModule,
     PlansModule,
     MailModule,
@@ -47,6 +50,10 @@ import { WhatsappModule } from "./modules/whastAppQr/whatsapp.module";
     CampaignsModule,
     GoogleMapsModule,
     WhatsappModule,
+    ScrapersModule,
+    CrmModule,
+    FunctionsModule,
+    AssistantChatsModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

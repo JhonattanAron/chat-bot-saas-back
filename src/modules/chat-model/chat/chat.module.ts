@@ -14,7 +14,7 @@ import {
 import {
   AssistantChat,
   AssistantChatSchema,
-} from "src/modules/users/schemas/assistant-chat.schema";
+} from "src/modules/assistant-chats/assistant-chat.schema";
 import { UsersService } from "src/modules/users/users.service";
 import { User, UserSchema } from "src/modules/users/schemas/UserSchema";
 import { FaqsModule } from "src/modules/faqs/faqs.module";
@@ -26,6 +26,12 @@ import {
 } from "src/modules/plans/stick-references.schema";
 import { DashboardModule } from "src/modules/dashboard/dashboard.module";
 import { PredictionLargueService } from "../model-ai/predictionlargue.service";
+import { FunctionRouterService } from "../model-ai/function-router.service";
+import { MemoryManagerService } from "../model-ai/memory-manager.service";
+import { FaqsService } from "src/modules/faqs/faqs.service";
+import { Faqs, FaqsSchema } from "src/modules/faqs/schema/faqs.schema";
+import { AssistantChatsModule } from "src/modules/assistant-chats/assistant-chats.module";
+import { AssistantChatsService } from "src/modules/assistant-chats/assistant-chats.service";
 
 @Module({
   imports: [
@@ -38,8 +44,11 @@ import { PredictionLargueService } from "../model-ai/predictionlargue.service";
     MongooseModule.forFeature([
       { name: StickReferences.name, schema: StickReferencesSchema },
     ]),
+    MongooseModule.forFeature([{ name: Faqs.name, schema: FaqsSchema }]),
     FaqsModule,
     PlansModule,
+    DashboardModule,
+    AssistantChatsModule,
   ],
   providers: [
     ChatService,
@@ -50,6 +59,10 @@ import { PredictionLargueService } from "../model-ai/predictionlargue.service";
     ProductsService,
     UsersService,
     CustomFunctionService,
+    FunctionRouterService,
+    MemoryManagerService,
+    FaqsService,
+    AssistantChatsService,
   ],
   controllers: [ChatController],
   exports: [ChatService],

@@ -500,4 +500,47 @@ export class BatchesService {
       emails: { $exists: true, $ne: [] },
     });
   }
+  async getNameBatches() {
+    const batches = await this.batchModel
+      .find()
+      .sort({ createdAt: -1 })
+      .select({ _id: 1, search_query: 1 })
+      .lean();
+
+    return batches.map((batch) => ({
+      value: batch._id.toString(),
+      label: batch.search_query,
+    }));
+  }
+  async getNamesAndPhonesByBatch(batchId: string) {
+    const leads = await this.leadModel.find(
+      {
+        batch_id: batchId,
+        phones: { $exists: true, $ne: [] },
+      },
+      {
+        company_name: 1,
+        phones: 1,
+        _id: 0,
+      },
+    );
+
+    return leads
+      .filter((l) => l.phones?.length)
+      .map((l) => ({
+        name: l.company_name,
+        phone: l.phones[0], // 👈 solo uno para inputs
+      }));
+  }
+  async deleteBatch(batchId: string) {
+    const result = await this.leadModel.deleteMany({
+      batch_id: batchId,
+    });
+
+    return {
+      source: "google_search",
+      batch_id: batchId,
+      deleted: result.deletedCount,
+    };
+  }
 }
