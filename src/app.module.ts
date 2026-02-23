@@ -26,6 +26,8 @@ import { CrmModule } from "./modules/crm/crm.module";
 import { FunctionsModule } from "./modules/functions/functions.module";
 import { AssistantChatsModule } from "./modules/assistant-chats/assistant-chats.module";
 import { ScrapersModule } from "./modules/scrapers/scrapers.module";
+import { MailModuleCorporative } from "./modules/mail/mail.module";
+import { InvoicesModule } from "./modules/invoices/invoices.module";
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { ScrapersModule } from "./modules/scrapers/scrapers.module";
     CrmModule,
     FunctionsModule,
     AssistantChatsModule,
+    MailModuleCorporative,
+    InvoicesModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

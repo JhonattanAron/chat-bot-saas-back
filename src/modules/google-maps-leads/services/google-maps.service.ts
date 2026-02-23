@@ -194,15 +194,11 @@ export class GoogleMapsService {
         previousPlaceIds = new Set(previousLeads.map((lead) => lead.place_id));
       }
 
-      // Aquí iría la lógica de extracción con Google Places API
-      // Por ahora es un placeholder
       const newLeads = await this.scrapePlacesByKeywords({
         location: batch.location,
         radius: batch.radius || 1500,
         keywords: keywordsToUse,
       });
-      // 👈 AQUÍ ESTÁ LA CLAVE
-      // Resultados de Google Places API
 
       // Filtrar resultados para deep search (excluir los del batch anterior)
       const filteredLeads = options.isDeepSearch
