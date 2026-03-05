@@ -1,6 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
-import * as bodyParser from "body-parser";
+import * as express from "express";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,13 +14,8 @@ async function bootstrap() {
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
-
-  // Body-parser global para todas las rutas (límite normal)
-  app.use(bodyParser.json({ limit: "1mb" }));
-  app.use(bodyParser.urlencoded({ limit: "1mb", extended: true }));
-
-  // Middleware solo para /chat/voice con límite grande
-  app.use("/chat/voice", bodyParser.json({ limit: "10mb" }));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   await app.listen(process.env.PORT ?? 8080);
 }

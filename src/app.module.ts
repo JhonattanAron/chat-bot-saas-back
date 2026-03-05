@@ -28,6 +28,10 @@ import { AssistantChatsModule } from "./modules/assistant-chats/assistant-chats.
 import { ScrapersModule } from "./modules/scrapers/scrapers.module";
 import { MailModuleCorporative } from "./modules/mail/mail.module";
 import { InvoicesModule } from "./modules/invoices/invoices.module";
+import { VpsModule } from "./modules/vps/vps.module";
+import { ContaboModule } from "./modules/contabo/contabo.module";
+import { CatalogModule } from "./modules/services/catalog/catalog.module";
+import { CartModule } from "./modules/services/cart/cart.module";
 
 @Module({
   imports: [
@@ -58,6 +62,10 @@ import { InvoicesModule } from "./modules/invoices/invoices.module";
     AssistantChatsModule,
     MailModuleCorporative,
     InvoicesModule,
+    VpsModule,
+    ContaboModule,
+    CatalogModule,
+    CartModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

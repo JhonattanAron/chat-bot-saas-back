@@ -1,5 +1,13 @@
-import { IsString, IsEmail, IsNumber, IsArray, IsOptional, IsEnum, IsDateString } from 'class-validator';
-import { InvoiceStatus } from '../schemas/invoice.schema';
+import {
+  IsString,
+  IsEmail,
+  IsNumber,
+  IsArray,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+} from "class-validator";
+import { InvoiceStatus } from "../schemas/invoice.schema";
 
 export class CreateInvoiceDto {
   @IsString()
@@ -19,14 +27,14 @@ export class CreateInvoiceDto {
     unitPrice: number;
   }>;
 
-  @IsNumber()
+  @IsString()
   subtotal: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsString()
   tax?: number;
 
-  @IsNumber()
+  @IsString()
   total: number;
 
   @IsOptional()

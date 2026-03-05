@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document } from "mongoose";
 
-export type ProductDocument = Product & Document;
+export type ProductDocument = ProductAssistan & Document;
 
 @Schema()
-export class Product {
+export class ProductAssistan {
   @Prop({ required: true })
   user_id: string;
 
@@ -24,4 +24,4 @@ export class Product {
   embedding: number[];
 }
 
-export const ProductSchema = SchemaFactory.createForClass(Product);
+export const ProductSchema = SchemaFactory.createForClass(ProductAssistan);

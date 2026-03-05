@@ -8,9 +8,9 @@ import { ChatCleanupService } from "../config/chat-cleanup.service";
 import { PredictionService } from "../model-ai/predictions.service";
 import { ProductsService } from "src/modules/products/products.service";
 import {
-  Product,
+  ProductAssistan,
   ProductSchema,
-} from "src/modules/products/schemas/product.schema";
+} from "src/modules/products/schemas/product-assistant.schema";
 import {
   AssistantChat,
   AssistantChatSchema,
@@ -36,7 +36,9 @@ import { AssistantChatsService } from "src/modules/assistant-chats/assistant-cha
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Chat.name, schema: ChatSchema }]),
-    MongooseModule.forFeature([{ name: Product.name, schema: ProductSchema }]),
+    MongooseModule.forFeature([
+      { name: ProductAssistan.name, schema: ProductSchema },
+    ]),
     MongooseModule.forFeature([
       { name: AssistantChat.name, schema: AssistantChatSchema },
     ]),

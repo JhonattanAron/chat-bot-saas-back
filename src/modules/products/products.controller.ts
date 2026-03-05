@@ -10,7 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ProductsService } from "./products.service";
-import { CreateProductDto } from "./dto/create-product.dto";
+import { CreateProductAssistantDto } from "./dto/create-product-assistant.dto";
 
 @Controller("products")
 export class ProductsController {
@@ -22,7 +22,7 @@ export class ProductsController {
   }
 
   @Post("bulk")
-  createMany(@Body() products: CreateProductDto[]) {
+  createMany(@Body() products: CreateProductAssistantDto[]) {
     return this.service.createMany(products);
   }
   @Post()
@@ -37,7 +37,7 @@ export class ProductsController {
       available?: boolean;
       stock?: number;
       assistant_id: string;
-    }
+    },
   ) {
     const product = {
       ...body,
@@ -54,7 +54,7 @@ export class ProductsController {
   @Get()
   async findAll(
     @Query("user_id") user_id: string,
-    @Query("assistant_id") assistant_id: string
+    @Query("assistant_id") assistant_id: string,
   ) {
     return this.service.findAll(user_id, assistant_id);
   }
@@ -75,7 +75,7 @@ export class ProductsController {
       description: string;
       tags?: string[];
       stock?: number;
-    }
+    },
   ) {
     const update = {
       ...body,

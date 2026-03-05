@@ -1,16 +1,19 @@
 // src/products/products.service.ts
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Product, ProductDocument } from "./schemas/product.schema";
+import {
+  ProductAssistan,
+  ProductDocument,
+} from "./schemas/product-assistant.schema";
 import { Model } from "mongoose";
 import { getEmbedding, cosineSimilarity } from "../../utils/embedding";
 import { normalizeText, expandWithSynonyms } from "../../utils/text-utils";
-import { CreateProductDto } from "./dto/create-product.dto";
+import { CreateProductAssistantDto } from "./dto/create-product-assistant.dto";
 
 @Injectable()
 export class ProductsService {
   constructor(
-    @InjectModel(Product.name) private model: Model<ProductDocument>
+    @InjectModel(ProductAssistan.name) private model: Model<ProductDocument>,
   ) {}
 
   async search(query: string, user_id: string) {
@@ -21,7 +24,7 @@ export class ProductsService {
     return products
       .map((product) => {
         const productTags = (product.tags || []).map((t: string) =>
-          t.toLowerCase()
+          t.toLowerCase(),
         );
         const productName = product.name?.toLowerCase() ?? "";
 
@@ -30,7 +33,7 @@ export class ProductsService {
             score +
             (productTags.some((tag) => tag.includes(term)) ? 1 : 0) +
             (productName.includes(term) ? 1 : 0),
-          0
+          0,
         );
 
         const semScore = product.embedding?.length
@@ -47,24 +50,24 @@ export class ProductsService {
       .sort((a, b) => (b.semanticScore ?? 0) - (a.semanticScore ?? 0))
       .slice(0, 10);
   }
-  async createMany(products: CreateProductDto[]) {
+  async createMany(products: CreateProductAssistantDto[]) {
     const docs = await Promise.all(
       products.map(async (p) => {
         const embedding = await getEmbedding(p.name + " " + p.tags.join(" "));
         return { ...p, embedding };
-      })
+      }),
     );
 
     return this.model.insertMany(docs);
   }
 
   async create(
-    product: CreateProductDto,
+    product: CreateProductAssistantDto,
     user_id: string,
-    assistant_id: string
+    assistant_id: string,
   ) {
     const embedding = await getEmbedding(
-      product.name + " " + (product.tags ?? []).join(" ")
+      product.name + " " + (product.tags ?? []).join(" "),
     );
     const doc = new this.model({
       ...product,
@@ -86,7 +89,7 @@ export class ProductsService {
   async update(
     id: string,
     user_id: string,
-    update: Partial<CreateProductDto> & { embedding?: number[] }
+    update: Partial<CreateProductAssistantDto> & { embedding?: number[] },
   ) {
     const product = await this.model.findOne({ _id: id, user_id }).lean();
     if (!product) {
