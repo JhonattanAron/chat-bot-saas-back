@@ -102,4 +102,12 @@ export class UpdateInvoiceDto {
   @IsOptional()
   @IsString()
   terms?: string;
+
+  @IsOptional()
+  @IsString()
+  transactionId?: string;
+
+  @IsOptional()
+  @IsString()
+  clientTransactionId?: string;
 }

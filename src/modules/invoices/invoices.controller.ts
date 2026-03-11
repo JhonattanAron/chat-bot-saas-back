@@ -70,4 +70,9 @@ export class InvoicesController {
     const deleted = await this.invoicesService.delete(id, req.user.id);
     return { success: deleted };
   }
+
+  @Get("number/:invoiceNumber")
+  async getByInvoiceNumber(@Param("invoiceNumber") invoiceNumber: string) {
+    return this.invoicesService.getByInvoiceNumber(invoiceNumber);
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import {
@@ -104,13 +104,33 @@ export class InvoicesService {
   }
 
   private async generateInvoiceNumber(): Promise<string> {
-    const count = await this.invoiceModel.countDocuments();
-    return `INV-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const lastInvoice = await this.invoiceModel
+      .findOne()
+      .sort({ createdAt: -1 })
+      .select("invoiceNumber");
+
+    if (!lastInvoice) {
+      return `INV-${new Date().getFullYear()}-00001`;
+    }
+
+    const lastNumber = parseInt(lastInvoice.invoiceNumber.split("-")[2]);
+    const newNumber = String(lastNumber + 1).padStart(5, "0");
+
+    return `INV-${new Date().getFullYear()}-${newNumber}`;
   }
 
   private getDefaultDueDate(): Date {
     const date = new Date();
     date.setDate(date.getDate() + 30);
     return date;
+  }
+  async getByInvoiceNumber(invoiceNumber: string) {
+    const invoice = await this.invoiceModel.findOne({ invoiceNumber }).lean();
+
+    if (!invoice) {
+      throw new NotFoundException("Factura no encontrada");
+    }
+
+    return invoice;
   }
 }

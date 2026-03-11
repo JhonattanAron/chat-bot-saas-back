@@ -1,19 +1,21 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { HydratedDocument, Types } from "mongoose";
 
 export type InvoiceDocument = HydratedDocument<Invoice>;
 
 export enum InvoiceStatus {
-  DRAFT = 'draft',
-  SENT = 'sent',
-  PAID = 'paid',
-  OVERDUE = 'overdue',
-  CANCELLED = 'cancelled',
+  DRAFT = "Borrador",
+  Pending = "Pendiente",
+  SENT = "Enviada",
+  PAID = "Pagada",
+  OVERDUE = "Atrasada",
+  EXPIRED = "Vencida",
+  CANCELLED = "Cancelada",
 }
 
 @Schema({ timestamps: true })
 export class Invoice {
-  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
+  @Prop({ required: true, type: Types.ObjectId, ref: "User" })
   userId: Types.ObjectId;
 
   @Prop({ required: true, unique: true })
@@ -61,6 +63,12 @@ export class Invoice {
 
   @Prop()
   terms?: string;
+
+  @Prop()
+  transactionId?: string;
+
+  @Prop()
+  clientTransactionId?: string;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
