@@ -111,3 +111,70 @@ export class UpdateInvoiceDto {
   @IsString()
   clientTransactionId?: string;
 }
+
+export class CheckoutInvoiceDto {
+  @IsString()
+  clientName: string;
+
+  @IsEmail()
+  clientEmail: string;
+
+  @IsArray()
+  cartItems: Array<{
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+
+  @IsNumber()
+  subtotal: number;
+
+  @IsNumber()
+  tax: number;
+
+  @IsNumber()
+  total: number;
+
+  @IsOptional()
+  @IsArray()
+  assets?: Array<{
+    assetId: string;
+    name: string;
+    type: string;
+  }>;
+}
+
+export class WebhookPaymentDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  clientTxId: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+}
+
+export class PaymentConfirmationDto {
+  @IsString()
+  transactionId: string;
+
+  @IsString()
+  clientTransactionId: string;
+
+  @IsString()
+  status: string;
+
+  @IsNumber()
+  amount: number;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+}

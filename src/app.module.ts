@@ -32,6 +32,7 @@ import { VpsModule } from "./modules/vps/vps.module";
 import { ContaboModule } from "./modules/contabo/contabo.module";
 import { CatalogModule } from "./modules/services/catalog/catalog.module";
 import { CartModule } from "./modules/services/cart/cart.module";
+import { PaymentsModule } from "./modules/payments/payments.module";
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { CartModule } from "./modules/services/cart/cart.module";
     ContaboModule,
     CatalogModule,
     CartModule,
+    PaymentsModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

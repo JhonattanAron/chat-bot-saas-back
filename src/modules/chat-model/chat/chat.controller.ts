@@ -25,14 +25,14 @@ export class ChatController {
     @Body()
     body: {
       assistant_id: string;
-      prompt: string;
+      promt: string;
     },
     @Req() req?: any,
   ) {
-    const { assistant_id, prompt } = body;
+    const { assistant_id, promt } = body;
     const user_id = req?.user?.id;
 
-    if (!assistant_id || !prompt) {
+    if (!assistant_id || !promt) {
       return {
         success: false,
         error: "Missing required fields: assistant_id, and prompt are required",
@@ -44,7 +44,7 @@ export class ChatController {
       const chat = await this.chatService.createChat(
         user_id,
         assistant_id,
-        prompt,
+        promt,
       );
 
       return {

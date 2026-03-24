@@ -11,7 +11,11 @@ import {
   Query,
 } from "@nestjs/common";
 import { InvoicesService } from "./invoices.service";
-import { CreateInvoiceDto, UpdateInvoiceDto } from "./dto/invoice.dto";
+import {
+  CreateInvoiceDto,
+  UpdateInvoiceDto,
+  CheckoutInvoiceDto,
+} from "./dto/invoice.dto";
 import { InvoiceStatus } from "./schemas/invoice.schema";
 import { ProxyAuthGuard } from "../auth/proxy-auth.guard";
 
@@ -23,6 +27,14 @@ export class InvoicesController {
   @Post()
   async create(@Request() req, @Body() createInvoiceDto: CreateInvoiceDto) {
     return this.invoicesService.create(req.user.id, createInvoiceDto);
+  }
+
+  @Post("checkout")
+  async createFromCheckout(
+    @Request() req,
+    @Body() checkoutDto: CheckoutInvoiceDto,
+  ) {
+    return this.invoicesService.createFromCheckout(req.user.id, checkoutDto);
   }
 
   @Get()

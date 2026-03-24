@@ -69,7 +69,31 @@ export class Invoice {
 
   @Prop()
   clientTransactionId?: string;
+
+  @Prop()
+  integrityHash?: string;
+
+  @Prop({ type: [Object], default: [] })
+  assets?: Array<{
+    assetId: string;
+    name: string;
+    type: string;
+  }>;
+
+  @Prop({ type: [Object], default: [] })
+  cartItems?: Array<{
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+
+  @Prop()
+  paymentReference?: string;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 InvoiceSchema.index({ userId: 1, createdAt: -1 });
+InvoiceSchema.index({ invoiceNumber: 1 });
+InvoiceSchema.index({ paymentReference: 1 });
+InvoiceSchema.index({ transactionId: 1 });
