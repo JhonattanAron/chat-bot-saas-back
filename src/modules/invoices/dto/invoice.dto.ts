@@ -88,10 +88,6 @@ export class UpdateInvoiceDto {
   total?: number;
 
   @IsOptional()
-  @IsEnum(InvoiceStatus)
-  status?: InvoiceStatus;
-
-  @IsOptional()
   @IsDateString()
   dueDate?: string;
 
@@ -119,14 +115,6 @@ export class CheckoutInvoiceDto {
   @IsEmail()
   clientEmail: string;
 
-  @IsArray()
-  cartItems: Array<{
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-  }>;
-
   @IsNumber()
   subtotal: number;
 
@@ -136,13 +124,7 @@ export class CheckoutInvoiceDto {
   @IsNumber()
   total: number;
 
-  @IsOptional()
-  @IsArray()
-  assets?: Array<{
-    assetId: string;
-    name: string;
-    type: string;
-  }>;
+  // assets field removed as per update
 }
 
 export class WebhookPaymentDto {

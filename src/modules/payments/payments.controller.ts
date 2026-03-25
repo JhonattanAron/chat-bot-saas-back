@@ -4,11 +4,11 @@ import {
   Body,
   Logger,
   BadRequestException,
-} from '@nestjs/common';
-import { PaymentsService } from './payments.service';
-import { WebhookPaymentDto } from '../invoices/dto/invoice.dto';
+} from "@nestjs/common";
+import { PaymentsService } from "./payments.service";
+import { WebhookPaymentDto } from "../invoices/dto/invoice.dto";
 
-@Controller('api')
+@Controller("payments")
 export class PaymentsController {
   private logger = new Logger(PaymentsController.name);
 
@@ -18,22 +18,21 @@ export class PaymentsController {
    * Webhook endpoint for Payphone payment confirmations
    * POST /api/webhooks/payphone
    */
-  @Post('webhooks/payphone')
+  @Post("webhooks/payphone")
   async handlePaymentWebhook(
     @Body() webhookDto: WebhookPaymentDto,
   ): Promise<any> {
     try {
-      this.logger.log('[Webhook] Received Payphone webhook');
+      this.logger.log("[Webhook] Received Payphone webhook");
 
       if (!webhookDto.id || !webhookDto.clientTxId) {
         throw new BadRequestException(
-          'Missing required fields: id, clientTxId',
+          "Missing required fields: id, clientTxId",
         );
       }
 
-      const result = await this.paymentsService.processPaymentWebhook(
-        webhookDto,
-      );
+      const result =
+        await this.paymentsService.processPaymentWebhook(webhookDto);
 
       return {
         success: true,
@@ -53,22 +52,30 @@ export class PaymentsController {
    * POST /api/payments/confirm
    * Body: { id: string, clientTxId: string }
    */
-  @Post('payments/confirm')
+  @Post("confirm")
   async confirmPayment(
-    @Body() body: { id: string; clientTxId: string },
+    @Body()
+    body: {
+      transactionId: string;
+      clientTransactionId: string;
+      invoiceNumber: string;
+    },
   ): Promise<any> {
     try {
-      this.logger.log('[Confirm] Confirming payment manually');
+      console.log(body);
 
-      if (!body.id || !body.clientTxId) {
+      this.logger.log("[Confirm] Confirming payment manually");
+
+      if (!body.transactionId || !body.clientTransactionId) {
         throw new BadRequestException(
-          'Missing required fields: id, clientTxId',
+          "Missing required fields: transactionId, clientTransactionId",
         );
       }
 
       const result = await this.paymentsService.handleManualConfirmation(
-        body.id,
-        body.clientTxId,
+        body.transactionId,
+        body.clientTransactionId,
+        body.invoiceNumber,
       );
 
       return {
@@ -88,7 +95,7 @@ export class PaymentsController {
    * Generate payment parameters for frontend
    * POST /api/payments/generate
    */
-  @Post('payments/generate')
+  @Post("generate")
   async generatePaymentParams(
     @Body()
     body: {
@@ -98,11 +105,13 @@ export class PaymentsController {
     },
   ): Promise<any> {
     try {
-      this.logger.log(`[Generate] Generating payment params for ${body.invoiceNumber}`);
+      this.logger.log(
+        `[Generate] Generating payment params for ${body.invoiceNumber}`,
+      );
 
       if (!body.invoiceNumber || !body.amount || !body.email) {
         throw new BadRequestException(
-          'Missing required fields: invoiceNumber, amount, email',
+          "Missing required fields: invoiceNumber, amount, email",
         );
       }
 

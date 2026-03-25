@@ -26,17 +26,16 @@ export class InvoicesController {
 
   @Post()
   async create(@Request() req, @Body() createInvoiceDto: CreateInvoiceDto) {
-    return this.invoicesService.create(req.user.id, createInvoiceDto);
+    const dto = { ...createInvoiceDto, status: InvoiceStatus.Pending };
+    return this.invoicesService.create(req.user.id, dto);
   }
 
   @Post("checkout")
-  async createFromCheckout(
-    @Request() req,
-    @Body() checkoutDto: CheckoutInvoiceDto,
-  ) {
+  async createFromCheckout(@Request() req, @Body() body: any) {
+    // guardamos los items completos
+    const checkoutDto = { ...body, cartItems: body.items };
     return this.invoicesService.createFromCheckout(req.user.id, checkoutDto);
   }
-
   @Get()
   async findAll(
     @Request() req,
@@ -62,7 +61,20 @@ export class InvoicesController {
     @Param("id") id: string,
     @Body() updateInvoiceDto: UpdateInvoiceDto,
   ) {
-    return this.invoicesService.update(id, req.user.id, updateInvoiceDto);
+    const dto = { ...updateInvoiceDto, status: InvoiceStatus.Pending };
+    return this.invoicesService.update(id, req.user.id, dto);
+  }
+  @Put(":number/number")
+  async updatePerNumber(
+    @Request() req,
+    @Param("number") invoiceNumber: string,
+    @Body() updateInvoiceDto: UpdateInvoiceDto,
+  ) {
+    return this.invoicesService.updateByInvoiceNumber(
+      invoiceNumber,
+      req.user.id,
+      updateInvoiceDto,
+    );
   }
 
   @Put(":id/status")

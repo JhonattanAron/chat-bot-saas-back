@@ -1,3 +1,4 @@
+import { CryptoUtil } from "../common/security/crypto.util";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
@@ -11,12 +12,13 @@ import {
   UpdateInvoiceDto,
   CheckoutInvoiceDto,
 } from "./dto/invoice.dto";
-import { CryptoUtil } from "../common/security/crypto.util";
+import { ContractedAssetsService } from "../contracted-assets/contracted-assets.service";
 
 @Injectable()
 export class InvoicesService {
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
+    private readonly contractService: ContractedAssetsService,
   ) {}
 
   async create(
@@ -28,9 +30,11 @@ export class InvoicesService {
       userId,
       invoiceNumber,
       ...createInvoiceDto,
+      status: InvoiceStatus.Pending,
       issuedDate: createInvoiceDto.issuedDate || new Date(),
       dueDate: createInvoiceDto.dueDate || this.getDefaultDueDate(),
     });
+
     return createdInvoice.save();
   }
 
@@ -58,9 +62,8 @@ export class InvoicesService {
     return this.invoiceModel.findOneAndUpdate(
       { _id: id, userId },
       updateInvoiceDto,
-      {
-        new: true,
-      },
+
+      { new: true },
     );
   }
 
@@ -69,13 +72,60 @@ export class InvoicesService {
     userId: string,
     status: InvoiceStatus,
   ): Promise<InvoiceDocument | null> {
-    const updateData: any = { status };
+    const updateData: Partial<InvoiceDocument> = { status };
     if (status === InvoiceStatus.PAID) {
       updateData.paidDate = new Date();
     }
     return this.invoiceModel.findOneAndUpdate({ _id: id, userId }, updateData, {
       new: true,
     });
+  }
+
+  async updateByInvoiceNumber(
+    invoiceNumber: string,
+    userId: string,
+    updateInvoiceDto: UpdateInvoiceDto,
+  ): Promise<InvoiceDocument | null> {
+    return this.invoiceModel.findOneAndUpdate(
+      { invoiceNumber },
+      updateInvoiceDto,
+      { new: true },
+    );
+  }
+
+  async processPayment(
+    invoiceNumber: string,
+    transactionId: string,
+    clientTransactionId: string,
+  ): Promise<InvoiceDocument | null> {
+    const invoice = await this.invoiceModel.findOne({ invoiceNumber });
+
+    if (!invoice) return null;
+
+    // 🛡️ IDPOTENCIA (CLAVE 🔥)
+    if (invoice.status === InvoiceStatus.PAID) {
+      return invoice;
+    }
+
+    const updated = await this.invoiceModel.findByIdAndUpdate(
+      invoice._id,
+      {
+        status: InvoiceStatus.PAID,
+        transactionId,
+        clientTransactionId,
+        paidDate: new Date(),
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new Error("Failed to update invoice");
+    }
+    console.log("El contrato se va a crear ...");
+
+    await this.contractService.processInvoice(updated);
+
+    return updated;
   }
 
   async delete(id: string, userId: string): Promise<boolean> {
@@ -129,27 +179,25 @@ export class InvoicesService {
     date.setDate(date.getDate() + 30);
     return date;
   }
-  async getByInvoiceNumber(invoiceNumber: string) {
+
+  async getByInvoiceNumber(invoiceNumber: string): Promise<InvoiceDocument> {
     const invoice = await this.invoiceModel.findOne({ invoiceNumber }).lean();
 
     if (!invoice) {
       throw new NotFoundException("Factura no encontrada");
     }
 
-    return invoice;
+    return invoice as InvoiceDocument;
   }
 
-  /**
-   * Create invoice from checkout (for payments)
-   */
   async createFromCheckout(
     userId: string,
-    checkoutDto: CheckoutInvoiceDto,
+    checkoutDto: any,
   ): Promise<InvoiceDocument> {
+    const items = checkoutDto.cartItems || [];
+
     const invoiceNumber = await this.generateInvoiceNumber();
     const paymentReference = CryptoUtil.generatePaymentReference(invoiceNumber);
-
-    // Generate integrity hash for security
     const integrityHash = CryptoUtil.generateIntegrityHash(
       invoiceNumber,
       InvoiceStatus.Pending,
@@ -160,14 +208,17 @@ export class InvoicesService {
       userId,
       invoiceNumber,
       paymentReference,
-      clientName: checkoutDto.clientName,
-      clientEmail: checkoutDto.clientEmail,
-      cartItems: checkoutDto.cartItems,
-      assets: checkoutDto.assets || [],
-      items: checkoutDto.cartItems.map((item) => ({
+      clientName: checkoutDto.clientName ?? checkoutDto.clientEmail ?? "",
+      clientEmail: checkoutDto.clientEmail ?? "",
+      items: items.map((item: any) => ({
         description: item.name,
         quantity: item.quantity,
         unitPrice: item.price,
+        billingInterval: item.billingInterval,
+        type: item.type,
+        itemId: item.itemId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
       })),
       subtotal: checkoutDto.subtotal,
       tax: checkoutDto.tax,
@@ -176,76 +227,31 @@ export class InvoicesService {
       integrityHash,
       issuedDate: new Date(),
       dueDate: this.getDefaultDueDate(),
+      transactionId: checkoutDto.transactionId,
+      clientTransactionId: checkoutDto.clientTransactionId,
+      notes: checkoutDto.notes,
     });
 
     return createdInvoice.save();
   }
 
-  /**
-   * Process payment - update invoice with payment details
-   */
-  async processPayment(
-    invoiceNumber: string,
-    transactionId: string,
-    clientTransactionId: string,
-  ): Promise<InvoiceDocument | null> {
-    const invoice = await this.invoiceModel.findOne({ invoiceNumber });
-
-    if (!invoice) {
-      throw new NotFoundException(
-        `Invoice ${invoiceNumber} not found`,
-      );
-    }
-
-    // Verify integrity before processing
-    if (!this.verifyIntegrityHash(invoice)) {
-      throw new Error('Invoice integrity check failed');
-    }
-
-    // Update invoice with payment details
-    const updatedInvoice = await this.invoiceModel.findOneAndUpdate(
-      { invoiceNumber },
-      {
-        status: InvoiceStatus.PAID,
-        paidDate: new Date(),
-        transactionId,
-        clientTransactionId,
-      },
-      { new: true },
-    );
-
-    return updatedInvoice;
-  }
-
-  /**
-   * Assign assets to user after payment
-   */
   async assignAssets(invoiceId: string): Promise<InvoiceDocument | null> {
     const invoice = await this.invoiceModel.findById(invoiceId);
 
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException("Invoice not found");
     }
 
     if (invoice.status !== InvoiceStatus.PAID) {
-      throw new Error('Invoice must be paid before assigning assets');
+      throw new Error("Invoice must be paid before assigning assets");
     }
-
-    // Assets assignment logic - update user with assigned assets
-    // This could be extended to update a User collection or assets collection
-    console.log(
-      `[Assets Assigned] Invoice: ${invoice.invoiceNumber}, Assets: ${invoice.assets?.length || 0}`,
-    );
 
     return invoice;
   }
 
-  /**
-   * Verify integrity hash of invoice
-   */
   verifyIntegrityHash(invoice: InvoiceDocument): boolean {
     if (!invoice.integrityHash) {
-      return true; // Skip check if no hash present (legacy invoices)
+      return true;
     }
 
     return CryptoUtil.verifyIntegrityHash(
@@ -256,18 +262,12 @@ export class InvoicesService {
     );
   }
 
-  /**
-   * Find invoice by payment reference
-   */
   async findByPaymentReference(
     paymentReference: string,
   ): Promise<InvoiceDocument | null> {
     return this.invoiceModel.findOne({ paymentReference });
   }
 
-  /**
-   * Find invoice by transaction ID
-   */
   async findByTransactionId(
     transactionId: string,
   ): Promise<InvoiceDocument | null> {

@@ -22,11 +22,11 @@ import { UsersService } from "../users/users.service";
 import { User, UserSchema } from "../users/schemas/UserSchema";
 import { FaqsModule } from "../faqs/faqs.module";
 import { CustomFunctionService } from "../chat-model/services/custom-function.service";
-import { PlansModule } from "../plans/plans.module";
-import {
-  StickReferences,
-  StickReferencesSchema,
-} from "../plans/stick-references.schema";
+// import { PlansModule } from "../plans/plans.module";
+// import {
+//   StickReferences,
+//   StickReferencesSchema,
+// } from "../plans/stick-references.schema";
 
 @Module({
   imports: [
@@ -43,11 +43,9 @@ import {
       { name: AssistantChat.name, schema: AssistantChatSchema },
     ]),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    MongooseModule.forFeature([
-      { name: StickReferences.name, schema: StickReferencesSchema },
-    ]),
+    // StickReferences schema removed
     FaqsModule,
-    PlansModule,
+    // PlansModule removed
   ],
   providers: [
     TelegramChatService,

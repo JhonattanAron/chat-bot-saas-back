@@ -138,24 +138,12 @@ export class PaymentsService {
         throw new BadRequestException("Failed to update invoice status");
       }
 
-      // Asignar assets
-      if (updatedInvoice.assets?.length) {
-        await this.invoicesService.assignAssets(updatedInvoice._id.toString());
-        this.logger.log(
-          `[Webhook] Assets assigned for invoice: ${updatedInvoice.invoiceNumber}`,
-        );
-      }
+      // Assets handling removed – paid invoices no longer have assets
 
       this.logger.log(
         `[Webhook] Payment processed successfully for invoice: ${updatedInvoice.invoiceNumber}`,
       );
-      // Asignar assets
-      if (updatedInvoice.assets?.length) {
-        await this.invoicesService.assignAssets(updatedInvoice._id.toString());
-        this.logger.log(
-          `[Webhook] Assets assigned for invoice: ${updatedInvoice.invoiceNumber}`,
-        );
-      }
+      // Assets handling removed – paid invoices no longer have assets
 
       this.logger.log(
         `[Webhook] Payment processed successfully for invoice: ${updatedInvoice.invoiceNumber}`,
@@ -180,6 +168,7 @@ export class PaymentsService {
   async handleManualConfirmation(
     transactionId: string,
     clientTransactionId: string,
+    invoiceNumber?: string, // lo hacemos opcional
   ): Promise<any> {
     try {
       this.logger.log(
@@ -191,8 +180,16 @@ export class PaymentsService {
         clientTransactionId,
       );
 
-      const invoice =
-        await this.invoicesService.findByTransactionId(transactionId);
+      // Buscamos la invoice primero por número
+      let invoice = invoiceNumber
+        ? await this.invoicesService.getByInvoiceNumber(invoiceNumber)
+        : null;
+
+      // Si no encontramos por número, buscamos por transactionId
+      if (!invoice) {
+        invoice = await this.invoicesService.findByTransactionId(transactionId);
+      }
+
       if (!invoice) {
         throw new BadRequestException("Invoice not found for this transaction");
       }

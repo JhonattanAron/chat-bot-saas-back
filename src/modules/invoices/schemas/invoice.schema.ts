@@ -46,7 +46,7 @@ export class Invoice {
   @Prop({ default: 0 })
   tax: number;
 
-  @Prop({ enum: InvoiceStatus, default: InvoiceStatus.DRAFT })
+  @Prop({ enum: InvoiceStatus, default: InvoiceStatus.Pending })
   status: InvoiceStatus;
 
   @Prop({ type: Date })
@@ -72,21 +72,6 @@ export class Invoice {
 
   @Prop()
   integrityHash?: string;
-
-  @Prop({ type: [Object], default: [] })
-  assets?: Array<{
-    assetId: string;
-    name: string;
-    type: string;
-  }>;
-
-  @Prop({ type: [Object], default: [] })
-  cartItems?: Array<{
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-  }>;
 
   @Prop()
   paymentReference?: string;

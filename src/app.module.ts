@@ -14,7 +14,6 @@ import { FaqsModule } from "./modules/faqs/faqs.module";
 import { ApiKeyValidateModule } from "./modules/api-key-validate/api-key-validate.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { TelegramChatModule } from "./modules/telegram-chat/telegram-chat.module";
-import { PlansModule } from "./modules/plans/plans.module";
 import { BatchesModule } from "./modules/batches/batches.module";
 import { SystemModule } from "./modules/system/system.module";
 import { MailModule } from "./modules/ai-emails/mail.module";
@@ -33,6 +32,8 @@ import { ContaboModule } from "./modules/contabo/contabo.module";
 import { CatalogModule } from "./modules/services/catalog/catalog.module";
 import { CartModule } from "./modules/services/cart/cart.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
+import { UsageModule } from "./modules/service-usage/usage.module";
+import { ResourcesModule } from "./modules/service-resources/resources.module";
 
 @Module({
   imports: [
@@ -50,7 +51,7 @@ import { PaymentsModule } from "./modules/payments/payments.module";
     ApiKeyValidateModule,
     DashboardModule,
     WebChatConfigModule,
-    PlansModule,
+    // PlansModule removed
     MailModule,
     BatchesModule,
     SystemModule,
@@ -68,6 +69,8 @@ import { PaymentsModule } from "./modules/payments/payments.module";
     CatalogModule,
     CartModule,
     PaymentsModule,
+    UsageModule,
+    ResourcesModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],
