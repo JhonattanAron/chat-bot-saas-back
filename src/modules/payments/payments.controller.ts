@@ -39,10 +39,12 @@ export class PaymentsController {
         data: result,
       };
     } catch (error) {
-      this.logger.error(`[Webhook] Error: ${error.message}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`[Webhook] Error: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
@@ -83,10 +85,12 @@ export class PaymentsController {
         data: result,
       };
     } catch (error) {
-      this.logger.error(`[Confirm] Error: ${error.message}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`[Confirm] Error: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
@@ -126,10 +130,12 @@ export class PaymentsController {
         data: params,
       };
     } catch (error) {
-      this.logger.error(`[Generate] Error: ${error.message}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`[Generate] Error: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }

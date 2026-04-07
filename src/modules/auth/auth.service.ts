@@ -59,6 +59,9 @@ export class AuthService {
     // Generar el token JWT
     const token = this.jwtService.sign(payload);
     console.log("Generated Token:", token);
+    await this.contractedAssetsService.createFreeContractForUser(
+      (user._id as string).toString(),
+    );
 
     res.cookie("jwt", token, {
       httpOnly: true, // Asegura que la cookie no sea accesible desde JavaScript
@@ -92,6 +95,10 @@ export class AuthService {
     // Generar el token JWT
     const token = this.jwtService.sign(payload);
     console.log("Generated Google Token:", token);
+
+    await this.contractedAssetsService.createFreeContractForUser(
+      (user._id as string).toString(),
+    );
 
     return {
       binding_id: user._id,

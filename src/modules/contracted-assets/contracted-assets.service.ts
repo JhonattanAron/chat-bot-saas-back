@@ -224,6 +224,7 @@ export class ContractedAssetsService {
       console.log("⚠️ Usuario ya tiene contrato Free");
       return existing;
     }
+    console.log("⚠️ Usuario No tiene contrato Free");
 
     const startDate = new Date();
     const endDate = new Date();
