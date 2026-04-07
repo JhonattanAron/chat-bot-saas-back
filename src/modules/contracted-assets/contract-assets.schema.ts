@@ -7,6 +7,7 @@ export enum ContractType {
   PLAN = "plan",
   ADDON = "addon",
   ONE_TIME = "one-time",
+  SERVICE = "service", // 🔹 nuevo tipo
 }
 
 export enum ContractStatus {

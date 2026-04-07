@@ -34,6 +34,7 @@ import { CartModule } from "./modules/services/cart/cart.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { UsageModule } from "./modules/service-usage/usage.module";
 import { ResourcesModule } from "./modules/service-resources/resources.module";
+import { OpenRouterModule } from "./modules/open-router/images-generator/openrouter.module";
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ResourcesModule } from "./modules/service-resources/resources.module";
     PaymentsModule,
     UsageModule,
     ResourcesModule,
+    OpenRouterModule,
   ],
   controllers: [AppController, SessionController],
   providers: [AppService],

@@ -15,6 +15,7 @@ import { AssistantChatsService } from "src/modules/assistant-chats/assistant-cha
 import { InjectModel } from "@nestjs/mongoose";
 import { Injectable } from "@nestjs/common";
 import { PredictionLargueService } from "../model-ai/predictionlargue.service";
+import { ResourcesService } from "src/modules/service-resources/resources.service";
 
 @Injectable()
 export class ChatService {
@@ -30,6 +31,7 @@ export class ChatService {
     private readonly customFunctionService: CustomFunctionService,
     private readonly functionRouter: FunctionRouterService,
     private readonly memoryManager: MemoryManagerService,
+    private readonly resourcesService: ResourcesService,
   ) {}
 
   /**
@@ -135,6 +137,9 @@ export class ChatService {
         output_tokens,
       };
     }
+    const totalTokens = input_tokens + output_tokens;
+
+    await this.resourcesService.consumeResource(userId, "tokens", totalTokens);
 
     // Execute function
     const functionResult = await this.customFunctionService.executeFunction(
@@ -180,7 +185,7 @@ export class ChatService {
       assistantId,
       userId,
       prompt,
-      "",
+      this.memoryManager.buildEnhancedMemoryContext([], 6),
     );
 
     const cleanedResponse = this.cleanModelResponse(result.response);
@@ -209,6 +214,10 @@ export class ChatService {
       input_tokens: result.input_tokens,
       output_tokens: result.output_tokens,
     });
+    const totalTokens =
+      (result.input_tokens || 0) + (result.output_tokens || 0);
+
+    await this.resourcesService.consumeResource(userId, "tokens", totalTokens);
 
     return await chat.save();
   }
@@ -224,6 +233,10 @@ export class ChatService {
 
     input_tokens = prediction.input_tokens || 0;
     output_tokens = prediction.output_tokens || 0;
+
+    const totalTokens = input_tokens + output_tokens;
+
+    await this.resourcesService.consumeResource(userId, "tokens", totalTokens);
 
     const messages = [
       {
@@ -259,6 +272,10 @@ export class ChatService {
 
     input_tokens = prediction.input_tokens || 0;
     output_tokens = prediction.output_tokens || 0;
+
+    const totalTokens = input_tokens + output_tokens;
+
+    await this.resourcesService.consumeResource(userId, "tokens", totalTokens);
 
     const messages = [
       {
@@ -312,8 +329,12 @@ export class ChatService {
     );
 
     // Use memory manager for efficient context building
+    const updatedChat = await this.chatModel.findById(chatId);
+
+    if (!updatedChat) throw new Error("Chat not found");
+
     const memoryContext = this.memoryManager.buildEnhancedMemoryContext(
-      chat.messages,
+      updatedChat.messages,
       6,
     );
 
@@ -326,6 +347,14 @@ export class ChatService {
 
     const cleanedResponse = this.cleanModelResponse(result.response);
     const importantInfo = this.extractImportantInfo(result.response);
+    const totalTokens =
+      (result.input_tokens || 0) + (result.output_tokens || 0);
+
+    await this.resourcesService.consumeResource(
+      chat.userId,
+      "tokens",
+      totalTokens,
+    );
 
     await this.chatModel.updateOne(
       { _id: chatId },

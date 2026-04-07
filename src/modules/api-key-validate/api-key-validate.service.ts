@@ -8,7 +8,7 @@ import { InjectModel } from "@nestjs/mongoose";
 export class ApiKeyValidateService {
   constructor(
     @InjectModel(ApiKey.name)
-    private readonly apiKeyModel: Model<ApiKeyDocument>
+    private readonly apiKeyModel: Model<ApiKeyDocument>,
   ) {}
 
   // Generates a unique API key string
@@ -45,5 +45,19 @@ export class ApiKeyValidateService {
   async validateClientKey(clientKey: string): Promise<boolean> {
     const foundKey = await this.apiKeyModel.findOne({ key: clientKey }).exec();
     return !!foundKey;
+  }
+
+  // Get user ID from API key
+  async validateAndGetUser(apiKey: string) {
+    if (!apiKey) return null;
+
+    const foundKey = await this.apiKeyModel.findOne({ key: apiKey }).exec();
+
+    if (!foundKey) return null;
+
+    return {
+      userId: foundKey.user_id.toString(),
+      keyId: foundKey._id.toString(),
+    };
   }
 }

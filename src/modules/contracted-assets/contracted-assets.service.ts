@@ -1,7 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
-import { ContractAsset, ContractAssetDocument } from "./contract-assets.schema";
+import { Model, Types } from "mongoose";
+import {
+  ContractAsset,
+  ContractAssetDocument,
+  ContractStatus,
+  ContractType,
+} from "./contract-assets.schema";
 import {
   InvoiceDocument,
   InvoiceStatus,
@@ -91,6 +96,14 @@ export class ContractedAssetsService {
   ) {
     const endDate = this.calculateEndDate(startDate, item.billingInterval);
 
+    // 🔹 Eliminar cualquier plan activo previo del usuario
+    await this.contractAssetModel.deleteMany({
+      userId: invoice.userId,
+      type: "plan",
+      status: "active",
+    });
+
+    // 🔹 Crear el nuevo plan
     return this.contractAssetModel.create({
       userId: invoice.userId,
       resourceId: item.itemId,
@@ -101,15 +114,12 @@ export class ContractedAssetsService {
       startDate,
       endDate,
       status: "active",
-
-      invoiceId, // 🔥 FIX CLAVE
-
+      invoiceId,
       metadata: {
         invoiceId,
       },
     });
   }
-
   // ========================================
   // 🔁 ADDONS RECURRENTES
   // ========================================
@@ -200,5 +210,42 @@ export class ContractedAssetsService {
     }
 
     return end;
+  }
+
+  async createFreeContractForUser(userId: string) {
+    // 2️⃣ Verificar si el usuario ya tiene contrato Free
+    const existing = await this.contractAssetModel.findOne({
+      userId,
+      resourceId: "699f30cfc5ac262e85e4145d",
+      type: "plan",
+    });
+
+    if (existing) {
+      console.log("⚠️ Usuario ya tiene contrato Free");
+      return existing;
+    }
+
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 1); // 1 año de duración
+
+    // 3️⃣ Crear contrato Free
+    const contract = await this.contractAssetModel.create({
+      invoiceId: "1",
+      userId,
+      resourceId: "699f30cfc5ac262e85e4145d",
+      type: "plan",
+      quantity: 1,
+      unitPrice: 0,
+      billingInterval: "year", // Plan Free anual
+      startDate,
+      endDate,
+      status: "active",
+      metadata: {
+        note: "Contrato Free asignado automáticamente al crear usuario",
+      },
+    });
+
+    return contract;
   }
 }

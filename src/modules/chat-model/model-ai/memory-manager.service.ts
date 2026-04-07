@@ -25,47 +25,33 @@ export class MemoryManagerService {
    * Builds an efficient memory context from recent messages
    * Only includes last 4-6 messages to save tokens
    */
-  buildEnhancedMemoryContext(
-    messages: any[],
-    maxMessages: number = 6
-  ): string {
-    if (messages.length === 0) {
-      return "";
-    }
+  buildEnhancedMemoryContext(messages: any[], maxMessages: number = 6): string {
+    if (messages.length === 0) return "";
 
-    // Get only recent messages (last N messages)
+    const summary =
+      messages.length > 10 ? this.compressConversation(messages) : "";
+
     const recentMessages = messages.slice(-maxMessages);
 
     const memoryParts: string[] = [];
 
-    for (let i = 0; i < recentMessages.length; i++) {
-      const msg = recentMessages[i];
-
+    for (const msg of recentMessages) {
       if (msg.role === "user") {
-        memoryParts.push(`U: ${msg.content.substring(0, 100)}`);
+        memoryParts.push(`User: ${msg.content.substring(0, 150)}`);
       } else if (msg.role === "assistant") {
-        const summary = msg.important_info
-          ? this.extractSummaryFromImportantInfo(msg.important_info)
-          : "responded";
-        memoryParts.push(`A: ${summary}`);
+        memoryParts.push(`Assistant: ${msg.content.substring(0, 150)}`);
+      }
+
+      if (msg.important_info) {
+        memoryParts.push(`Memory: ${msg.important_info}`);
       }
     }
 
-    return memoryParts.length > 0
-      ? `RECENT CONTEXT: ${memoryParts.join(" | ")}`
-      : "";
-  }
-
-  /**
-   * Extracts main information from important_info tag
-   */
-  private extractSummaryFromImportantInfo(importantInfo: string): string {
-    const mainInfoMatch = importantInfo.match(/\[IMPORTANT_INFO: ([^[]+)/);
-    if (mainInfoMatch) {
-      const info = mainInfoMatch[1].trim();
-      return info.substring(0, 80); // Limit to 80 chars
-    }
-    return "responded";
+    return `
+${summary}
+RECENT CONTEXT:
+${memoryParts.join("\n")}
+`.trim();
   }
 
   /**
@@ -87,7 +73,7 @@ export class MemoryManagerService {
       // Extract executed functions from important_info
       if (msg.important_info) {
         const functionsMatch = msg.important_info.match(
-          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/
+          /\[FUNCIONES_EJECUTADAS: ([^\]]+)\]/,
         );
         if (functionsMatch) {
           const funcs = functionsMatch[1].split(" ");
@@ -168,16 +154,18 @@ Last Action: ${summary.lastAction}
     if (lastMessage) {
       essential.push(lastMessage);
       tokenCount += this.estimateTokens(
-        `${lastMessage.role}: ${lastMessage.content}`
+        `${lastMessage.role}: ${lastMessage.content}`,
       );
     }
 
     // Add previous messages in reverse order until we hit token limit
-    for (let i = messages.length - 2; i >= 0 && tokenCount < maxTokenEstimate; i--) {
+    for (
+      let i = messages.length - 2;
+      i >= 0 && tokenCount < maxTokenEstimate;
+      i--
+    ) {
       const msg = messages[i];
-      const msgTokens = this.estimateTokens(
-        `${msg.role}: ${msg.content}`
-      );
+      const msgTokens = this.estimateTokens(`${msg.role}: ${msg.content}`);
 
       if (tokenCount + msgTokens <= maxTokenEstimate) {
         essential.unshift(msg);
@@ -203,7 +191,7 @@ Last Action: ${summary.lastAction}
   buildMemorizedPrompt(
     basePrompt: string,
     memoryContext: string,
-    userMessage: string
+    userMessage: string,
   ): string {
     if (!memoryContext) {
       return `${basePrompt}\n\nUser: ${userMessage}`;

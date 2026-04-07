@@ -21,5 +21,6 @@ import { CatalogModule } from "../services/catalog/catalog.module";
   ],
   providers: [ResourcesService],
   controllers: [ResourcesController],
+  exports: [ResourcesService],
 })
 export class ResourcesModule {}

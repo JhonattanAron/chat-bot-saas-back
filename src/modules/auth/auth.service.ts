@@ -10,6 +10,7 @@ import { User } from "../users/schemas/UserSchema";
 import { randomUUID } from "crypto";
 import { MailService } from "./service/confirmMail.service";
 import * as bcrypt from "bcrypt";
+import { ContractedAssetsService } from "../contracted-assets/contracted-assets.service";
 
 @Injectable()
 export class AuthService {
@@ -17,6 +18,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private userService: UsersService,
     private readonly mailService: MailService,
+    private readonly contractedAssetsService: ContractedAssetsService,
   ) {}
 
   async signIn(
@@ -102,17 +104,19 @@ export class AuthService {
   private readonly SALT_ROUNDS = 10;
 
   async register(name: string, email: string, password: string) {
+    // 1️⃣ Verificar si ya existe usuario con el mismo email
     const existingUser = await this.userService.obtenerUsuarios(email);
-
     if (existingUser) {
       throw new BadRequestException("El correo ya está registrado");
     }
 
-    // Hashear la contraseña antes de guardarla
+    // 2️⃣ Hashear la contraseña
     const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
 
+    // 3️⃣ Generar token de verificación de email
     const emailVerificationToken = randomUUID();
 
+    // 4️⃣ Crear usuario
     const user = await this.userService.crearUsuario({
       name,
       email,
@@ -121,11 +125,18 @@ export class AuthService {
       emailVerificationToken,
     });
 
+    // 5️⃣ Enviar correo de verificación
     await this.mailService.sendVerificationEmail(
       user.email,
       emailVerificationToken,
     );
 
+    // 6️⃣ Asignar contrato Free automáticamente
+    await this.contractedAssetsService.createFreeContractForUser(
+      (user._id as string).toString(),
+    );
+
+    // 7️⃣ Retornar mensaje de registro
     return {
       message: "Usuario registrado. Revisa tu correo para confirmar tu cuenta.",
     };

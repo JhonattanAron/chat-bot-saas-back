@@ -37,21 +37,23 @@ export class ResourcesService {
     let creditsTotal = 0;
     let storageTotal = 0;
 
-    const plans: ContractAssetDocument[] = [];
-    const addons: ContractAssetDocument[] = [];
+    const plans: any[] = [];
+    const addons: any[] = [];
 
     for (const asset of assets) {
       const product = await this.productsService.findProductById(
         asset.resourceId,
       );
-
       if (!product) continue;
 
       const metadata = product.metadata || {};
 
       // ✅ PLAN
       if (asset.type === "plan") {
-        plans.push(asset);
+        plans.push({
+          ...asset.toObject(),
+          planName: product.name, // <-- agregamos el nombre del plan
+        });
 
         tokensTotal += (metadata.tokens || 0) * asset.quantity;
         creditsTotal += (metadata.credits || 0) * asset.quantity;
@@ -59,7 +61,10 @@ export class ResourcesService {
 
       // ✅ ADDON
       if (asset.type === "addon") {
-        addons.push(asset);
+        addons.push({
+          ...asset.toObject(),
+          addonName: product.name, // <-- agregamos nombre del addon
+        });
 
         if (metadata.type === "tokens") {
           tokensTotal += (metadata.quantity || 0) * asset.quantity;
@@ -70,7 +75,7 @@ export class ResourcesService {
         }
       }
 
-      // ✅ ONE-TIME (🔥 FIX COMPLETO)
+      // ✅ ONE-TIME
       if (asset.type === "one-time") {
         if (metadata.type === "tokens") {
           tokensTotal += (metadata.quantity || 0) * asset.quantity;
@@ -95,23 +100,21 @@ export class ResourcesService {
         used: tokensUsed,
         available: tokensTotal - tokensUsed,
       },
-
       credits: {
         total: creditsTotal,
         used: creditsUsed,
         available: creditsTotal - creditsUsed,
       },
-
       storage: {
         total: storageTotal,
         used: 0,
         available: storageTotal,
       },
-
-      plans,
-      addons,
+      plans, // cada plan ahora tiene planName
+      addons, // cada addon ahora tiene addonName
     };
   }
+
   async consumeResource(
     userId: string,
     resource: "tokens" | "credits" | "storage",
@@ -139,5 +142,16 @@ export class ResourcesService {
       success: true,
       remaining: resourceData.available - amount,
     };
+  }
+  async hasEnoughCredits(userId: string, amount: number): Promise<boolean> {
+    if (amount <= 0) return true; // siempre hay suficiente para 0 o negativo
+
+    // 🔹 obtener recursos actuales del usuario
+    const resources = await this.getUserResources(userId);
+
+    // 🔹 chequear créditos disponibles
+    const creditsAvailable = resources.credits?.available || 0;
+
+    return creditsAvailable >= amount;
   }
 }

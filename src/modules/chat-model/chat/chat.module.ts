@@ -32,6 +32,7 @@ import { FaqsService } from "src/modules/faqs/faqs.service";
 import { Faqs, FaqsSchema } from "src/modules/faqs/schema/faqs.schema";
 import { AssistantChatsModule } from "src/modules/assistant-chats/assistant-chats.module";
 import { AssistantChatsService } from "src/modules/assistant-chats/assistant-chats.service";
+import { ResourcesModule } from "src/modules/service-resources/resources.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AssistantChatsService } from "src/modules/assistant-chats/assistant-cha
     FaqsModule,
     // PlansModule removed
     // DashboardModule removed
+    ResourcesModule,
     AssistantChatsModule,
   ],
   providers: [
