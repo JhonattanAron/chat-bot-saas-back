@@ -48,6 +48,7 @@ export class OpenRouterController {
       return { success: false, message: "API key inválida" };
     }
     const { userId } = client;
+    console.log(userId);
 
     // verificar créditos antes de generar la imagen
     const hasCredits = await this.resourseservice.hasEnoughCredits(userId, 0.5);
