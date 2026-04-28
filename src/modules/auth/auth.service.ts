@@ -52,7 +52,7 @@ export class AuthService {
       sub: user._id,
       email: user.email,
       image: user.image,
-      binding_id: (user._id as string).toString(),
+      binding_id: user._id.toString(),
     };
     console.log("Payload:", payload);
 
@@ -60,7 +60,7 @@ export class AuthService {
     const token = this.jwtService.sign(payload);
     console.log("Generated Token:", token);
     await this.contractedAssetsService.createFreeContractForUser(
-      (user._id as string).toString(),
+      user._id.toString(),
     );
 
     res.cookie("jwt", token, {
@@ -87,7 +87,7 @@ export class AuthService {
       name: user.name,
       email: user.email,
       image: user.image,
-      binding_id: (user._id as string).toString(),
+      binding_id: user._id.toString(),
     };
 
     console.log("Payload:", payload);
@@ -97,7 +97,7 @@ export class AuthService {
     console.log("Generated Google Token:", token);
 
     await this.contractedAssetsService.createFreeContractForUser(
-      (user._id as string).toString(),
+      user._id.toString(),
     );
 
     return {
@@ -140,7 +140,7 @@ export class AuthService {
 
     // 6️⃣ Asignar contrato Free automáticamente
     await this.contractedAssetsService.createFreeContractForUser(
-      (user._id as string).toString(),
+      user._id.toString(),
     );
 
     // 7️⃣ Retornar mensaje de registro
