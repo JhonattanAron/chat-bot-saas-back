@@ -30,7 +30,7 @@ export class WhatsappController {
   }
   @Get("session-status")
   getSessionStatus(@Query("userId") userId: string) {
-    const session = this.service.getSession(userId);
+    const session = this.service.getSessionState(userId);
     return { connected: !!session }; // true si la sesión existe
   }
   @Get("session-state")

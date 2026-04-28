@@ -6,12 +6,19 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import { existsSync, rmSync } from "fs";
-import { delay } from "./utils/delay.util";
+
+type SessionState = {
+  socket?: WASocket;
+  reconnectAttempts: number;
+  isConnecting: boolean;
+  qr?: string | null;
+  connected: boolean;
+};
 
 @Injectable()
 export class WhatsappService {
   private logger = new Logger(WhatsappService.name);
-  private sessions = new Map<string, WASocket>();
+  private sessions = new Map<string, SessionState>();
 
   /* ======================
      INICIAR SESIÓN
@@ -20,152 +27,206 @@ export class WhatsappService {
     userId: string,
     onUpdate: (data: { qr?: string | null; connected?: boolean }) => void,
   ) {
-    const sessionPath = `./sessions/${userId}`;
+    let state = this.sessions.get(userId);
 
-    // evitar sockets duplicados
-    if (this.sessions.has(userId)) {
-      this.logger.warn(`⚠️ Sesión ya activa para ${userId}`);
+    if (!state) {
+      state = {
+        reconnectAttempts: 0,
+        isConnecting: false,
+        connected: false,
+        qr: null,
+      };
+      this.sessions.set(userId, state);
+    }
+
+    // 🔒 evitar múltiples conexiones
+    if (state.isConnecting) {
+      this.logger.warn(`⛔ Ya conectando ${userId}`);
       return;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    state.isConnecting = true;
+
+    const sessionPath = `./sessions/${userId}`;
+    const { state: authState, saveCreds } =
+      await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
-      auth: state,
-      printQRInTerminal: false,
+      auth: authState,
       markOnlineOnConnect: false,
       syncFullHistory: false,
+      connectTimeoutMs: 20000,
+      keepAliveIntervalMs: 15000,
     });
 
+    state.socket = sock;
+
     sock.ev.on("creds.update", saveCreds);
-    this.sessions.set(userId, sock);
 
     sock.ev.on("connection.update", (update) => {
       const { connection, qr, lastDisconnect } = update;
 
-      /* 📷 QR */
+      // 📷 QR
       if (qr) {
-        this.logger.log(`📷 QR generado para ${userId}`);
+        state.qr = qr;
+        state.connected = false;
         onUpdate({ qr, connected: false });
         return;
       }
 
-      /* ✅ CONECTADO */
+      // ✅ CONECTADO
       if (connection === "open") {
-        this.logger.log(`✅ WhatsApp conectado: ${userId}`);
+        this.logger.log(`✅ Conectado ${userId}`);
+
+        state.qr = null;
+        state.connected = true;
+        state.reconnectAttempts = 0;
+        state.isConnecting = false;
+
         onUpdate({ qr: null, connected: true });
         return;
       }
 
-      /* 🔌 DESCONECTADO */
+      // 🔌 DESCONECTADO
       if (connection === "close") {
-        const error = lastDisconnect?.error;
-        const statusCode = this.getStatusCode(error);
+        state.connected = false;
+        state.isConnecting = false;
 
-        this.sessions.delete(userId);
+        const error = lastDisconnect?.error as Boom;
+        const code = error?.output?.statusCode;
 
-        /* 🚪 LOGOUT REAL */
-        if (this.isLoggedOut(error)) {
-          this.logger.warn(`🚪 Logout detectado para ${userId}`);
+        // 🚪 LOGOUT
+        if (code === DisconnectReason.loggedOut) {
+          this.logger.warn(`🚪 Logout ${userId}`);
 
           if (existsSync(sessionPath)) {
             rmSync(sessionPath, { recursive: true, force: true });
-            this.logger.log(`🧹 Carpeta eliminada: ${sessionPath}`);
           }
 
+          this.sessions.delete(userId);
           onUpdate({ connected: false });
           return;
         }
 
-        /* ⚠️ CONFLICTO 409 */
-        if (statusCode === 409) {
-          this.logger.warn(`⚠️ Conflicto de sesión para ${userId}`);
-          onUpdate({ connected: false });
-          return;
+        // 🌐 fallo de conexión
+        if (error?.message?.includes("Connection Failure")) {
+          this.logger.warn(`🌐 Connection Failure ${userId}`);
         }
 
-        /* 🔄 ERROR TEMPORAL → REINTENTAR */
-        this.logger.warn(`🔄 Error temporal, reintentando ${userId}`);
+        // 📈 BACKOFF EXPONENCIAL
+        state.reconnectAttempts++;
+
+        const delay = Math.min(
+          30000,
+          5000 * Math.pow(2, state.reconnectAttempts),
+        );
+
+        this.logger.warn(
+          `🔄 Reintentando ${userId} en ${delay / 1000}s (intento ${state.reconnectAttempts})`,
+        );
+
         setTimeout(() => {
           this.startSession(userId, onUpdate);
-        }, 3000);
+        }, delay);
       }
     });
   }
 
   /* ======================
-     HELPERS (TYPE SAFE)
+     ESTADO
   ====================== */
-  private getStatusCode(error: unknown): number | undefined {
-    if (error instanceof Boom) {
-      return error.output?.statusCode;
+  getSessionState(userId: string) {
+    const state = this.sessions.get(userId);
+
+    if (!state) {
+      return {
+        qr: null,
+        connected: false,
+        reconnecting: false,
+        attempts: 0,
+      };
     }
-    return undefined;
+
+    return {
+      qr: state.qr ?? null,
+      connected: state.connected,
+      reconnecting: state.isConnecting,
+      attempts: state.reconnectAttempts,
+    };
   }
 
-  private isLoggedOut(error: unknown): boolean {
-    if (error instanceof Boom) {
-      return (
-        error.output?.statusCode === DisconnectReason.loggedOut ||
-        error.data === DisconnectReason.loggedOut
-      );
-    }
-
-    if (error instanceof Error) {
-      return error.message.toLowerCase().includes("logged out");
-    }
-
-    return false;
+  isConnected(userId: string): boolean {
+    return this.sessions.get(userId)?.connected ?? false;
   }
 
   /* ======================
-     OBTENER SESIÓN
+     OBTENER SOCKET
   ====================== */
-  getSession(userId: string) {
-    return this.sessions.get(userId);
+  private getSocket(userId: string): WASocket {
+    const sock = this.sessions.get(userId)?.socket;
+    if (!sock) throw new Error("Sesión no iniciada");
+    return sock;
   }
 
   /* ======================
      ENVIAR MENSAJE
   ====================== */
   async sendMessage(userId: string, phone: string, message: string) {
-    const sock = this.getSession(userId);
-    if (!sock) throw new Error("Sesión no iniciada");
-    console.log("Mensaje Enviado....");
+    const sock = this.getSocket(userId);
 
-    await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
+    await sock.sendMessage(`${phone}@s.whatsapp.net`, {
+      text: message,
+    });
+
+    await this.randomDelay();
   }
 
   /* ======================
      ENVÍO MASIVO
   ====================== */
   async sendBulk(userId: string, phones: string[], message: string) {
-    const sock = this.getSession(userId);
-    if (!sock) throw new Error("Sesión no iniciada");
-
-    (async () => {
-      for (const phone of phones) {
-        try {
-          await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
-          this.logger.log(`✅ Enviado a ${phone}`);
-        } catch (err: any) {
-          this.logger.warn(`⚠️ Error enviando a ${phone}: ${err?.message}`);
-        }
-        await delay(3000, 6000);
+    for (const phone of phones) {
+      try {
+        await this.sendMessage(userId, phone, message);
+        this.logger.log(`✅ Enviado a ${phone}`);
+      } catch (err: any) {
+        this.logger.warn(`⚠️ Error con ${phone}: ${err?.message}`);
       }
-      this.logger.log("📩 Envío masivo finalizado");
-    })();
+    }
 
     return {
       status: "ok",
-      message: `Envío iniciado para ${phones.length} números`,
+      message: `Envío completado`,
     };
   }
 
   /* ======================
-     ESTADO
+     CERRAR SESIÓN
   ====================== */
-  isConnected(userId: string): boolean {
-    return this.sessions.has(userId);
+  async closeSession(userId: string) {
+    const state = this.sessions.get(userId);
+    if (!state) return;
+
+    try {
+      state.socket?.end;
+    } catch {}
+
+    const sessionPath = `./sessions/${userId}`;
+
+    if (existsSync(sessionPath)) {
+      rmSync(sessionPath, { recursive: true, force: true });
+    }
+
+    this.sessions.delete(userId);
+
+    this.logger.log(`🧹 Sesión cerrada ${userId}`);
+  }
+
+  /* ======================
+     DELAY HUMANO (ANTI-BAN)
+  ====================== */
+  private async randomDelay() {
+    const delay = 4000 + Math.random() * 6000;
+    return new Promise((res) => setTimeout(res, delay));
   }
 }
