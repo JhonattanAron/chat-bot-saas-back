@@ -109,7 +109,21 @@ export class WhatsappService {
 
         // 🚫 nunca se autenticó → no reconectar
         if (!state.connected) {
-          this.logger.warn(`⛔ No autenticado → no reconectar ${userId}`);
+          this.logger.warn(`📷 No autenticado → reiniciando sesión ${userId}`);
+
+          const sessionPath = `./sessions/${userId}`;
+
+          // 🧹 limpiar sesión corrupta/incompleta
+          if (existsSync(sessionPath)) {
+            rmSync(sessionPath, { recursive: true, force: true });
+          }
+
+          // 🔁 reiniciar limpio para generar QR
+          setTimeout(() => {
+            if (!this.sessions.has(userId)) return;
+            this.startSession(userId, onUpdate);
+          }, 2000);
+
           return;
         }
 
