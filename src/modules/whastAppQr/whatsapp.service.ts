@@ -83,19 +83,18 @@ export class WhatsappService {
         state.reconnectAttempts = 0;
         state.isConnecting = false;
 
-        onUpdate({ qr: null, connected: true });
+        onUpdate({ connected: true });
         return;
       }
 
       // 🔌 DESCONECTADO
       if (connection === "close") {
-        state.connected = false;
         state.isConnecting = false;
 
         const error = lastDisconnect?.error as Boom;
         const code = error?.output?.statusCode;
 
-        // 🚪 LOGOUT
+        // 🚪 LOGOUT (PRIMERO)
         if (code === DisconnectReason.loggedOut) {
           this.logger.warn(`🚪 Logout ${userId}`);
 
@@ -108,12 +107,19 @@ export class WhatsappService {
           return;
         }
 
+        // 🚫 nunca se autenticó → no reconectar
+        if (!state.connected) {
+          this.logger.warn(`⛔ No autenticado → no reconectar ${userId}`);
+          return;
+        }
+
         // 🌐 fallo de conexión
         if (error?.message?.includes("Connection Failure")) {
           this.logger.warn(`🌐 Connection Failure ${userId}`);
         }
 
-        // 📈 BACKOFF EXPONENCIAL
+        // 🔁 reconexión controlada
+        state.connected = false;
         state.reconnectAttempts++;
 
         const delay = Math.min(
@@ -126,6 +132,7 @@ export class WhatsappService {
         );
 
         setTimeout(() => {
+          if (!this.sessions.has(userId)) return;
           this.startSession(userId, onUpdate);
         }, delay);
       }
@@ -160,7 +167,7 @@ export class WhatsappService {
   }
 
   /* ======================
-     OBTENER SOCKET
+     SOCKET
   ====================== */
   private getSocket(userId: string): WASocket {
     const sock = this.sessions.get(userId)?.socket;
@@ -196,7 +203,7 @@ export class WhatsappService {
 
     return {
       status: "ok",
-      message: `Envío completado`,
+      message: "Envío completado",
     };
   }
 
@@ -208,8 +215,15 @@ export class WhatsappService {
     if (!state) return;
 
     try {
-      state.socket?.end;
-    } catch {}
+      // 🔥 primero limpiar listeners
+      state.socket?.ev.removeAllListeners("connection.update");
+      state.socket?.ev.removeAllListeners("creds.update");
+
+      // 🔌 luego cerrar
+      state.socket?.end?.(new Error("Manual close"));
+    } catch (err) {
+      this.logger.warn(`⚠️ Error cerrando socket: ${err}`);
+    }
 
     const sessionPath = `./sessions/${userId}`;
 
@@ -219,11 +233,11 @@ export class WhatsappService {
 
     this.sessions.delete(userId);
 
-    this.logger.log(`🧹 Sesión cerrada ${userId}`);
+    this.logger.log(`🧹 Sesión cerrada correctamente ${userId}`);
   }
 
   /* ======================
-     DELAY HUMANO (ANTI-BAN)
+     DELAY HUMANO
   ====================== */
   private async randomDelay() {
     const delay = 4000 + Math.random() * 6000;
