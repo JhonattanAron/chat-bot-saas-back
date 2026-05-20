@@ -26,8 +26,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ghcr.io/JhonattanAron/chatbot-api:latest .
-
+          docker build -t ghcr.io/JhonattanAron/chat-bot-saas-back:latest.
       - name: Push Docker image
         run: |
-          docker push ghcr.io/JhonattanAron/chatbot-api:latest
+          docker push ghcr.io/JhonattanAron/chat-bot-saas-back:latest
