@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   docker:
@@ -26,7 +26,8 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ghcr.io/JhonattanAron/chat-bot-saas-back:latest.
+          docker build -t ghcr.io/JhonattanAron/chatbot-api:latest .
+
       - name: Push Docker image
         run: |
-          docker push ghcr.io/JhonattanAron/chat-bot-saas-back:latest
+          docker push ghcr.io/JhonattanAron/chatbot-api:latest
